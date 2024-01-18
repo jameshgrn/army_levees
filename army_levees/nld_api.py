@@ -162,10 +162,10 @@ for system_id in usace_system_ids[5:8]:
             invalid_system_ids.append(system_id)
             continue  # Skip to the next iteration of the loop
         
-        seg_id = gdf['segmentId'].iloc[0]
-        segment_info_url = f'https://levees.sec.usace.army.mil:443/api-local/segments/{seg_id}'
-        segment_info = get_request(segment_info_url)
-        crs = 'EPSG:4269'
+        # seg_id = gdf['segmentId'].iloc[0]
+        # segment_info_url = f'https://levees.sec.usace.army.mil:443/api-local/segments/{seg_id}'
+        # segment_info = get_request(segment_info_url)
+        # crs = 'EPSG:4269'
         elevation_data = []
 
         for i, g in gdf.groupby('segmentId'):
