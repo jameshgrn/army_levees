@@ -25,41 +25,50 @@ def topojson_to_geojson(data):
             arcs = data['arcs']
             objects = data['objects']
             
+            geometries = []
+            properties_list = []
+            zs = []
+            ms = []
+            
             for key in objects:
                 geom = objects[key]
-                if geom['type'] == 'LineString':
-                    try:
+                properties = geom.get('properties', {})  # Extract properties
+                try:
+                    if geom['type'] == 'LineString':
                         arc_indices = geom['arcs'] if isinstance(geom['arcs'], list) else [geom['arcs']]
                         line_coords = [arcs[index] for index in arc_indices]
-                        # Slice each coordinate tuple to the first two or three elements
-                        flat_coords = [coord[:2] for sublist in line_coords for coord in sublist]  # 2D coordinates
-                        # flat_coords = [coord[:3] for sublist in line_coords for coord in sublist]  # 3D coordinates, if elevation is needed
-                        geometry = LineString(flat_coords)
-                    except Exception as e:
-                        print(f"Error processing LineString for key {key}: {e}")
-                        return None
-                elif geom['type'] == 'MultiLineString':
-                    try:
+                        flat_coords = [coord for sublist in line_coords for coord in sublist]
+                        geometry = LineString([(coord[0], coord[1]) for coord in flat_coords])
+                        geometries.append(geometry)
+                        properties_list.append(properties)
+                        zs.append([coord[2] for coord in flat_coords])
+                        ms.append([coord[3] for coord in flat_coords])
+                    elif geom['type'] == 'MultiLineString':
                         multi_line_coords = [[arcs[index] for index in part] for part in geom['arcs']]
-                        # Slice each coordinate tuple to the first two or three elements
-                        flat_multi_coords = [[coord[:2] for coord in part] for part in multi_line_coords]  # 2D coordinates
-                        # flat_multi_coords = [[coord[:3] for coord in part] for part in multi_line_coords]  # 3D coordinates, if elevation is needed
-                        geometry = MultiLineString([LineString(part) for part in flat_multi_coords])
-                    except Exception as e:
-                        print(f"Error processing MultiLineString for key {key}: {e}")
-                        return None
-                else:
-                    print(f"Unsupported geometry type for key {key}: {geom['type']}")
-                    return None
-                
-                # Create a GeoDataFrame
-                gdf = gpd.GeoDataFrame([{'geometry': geometry}])
-                return gdf
-        elif data['type'] == 'FeatureCollection':
-            features = data['features']
-            geometries = [shape(feature['geometry']) for feature in features]
-            gdf = gpd.GeoDataFrame(geometry=geometries)
+                        flat_multi_coords = [[coord for coord in part] for part in multi_line_coords]
+                        geometry = MultiLineString([LineString([(coord[0], coord[1]) for coord in part]) for part in flat_multi_coords])
+                        geometries.append(geometry)
+                        properties_list.append(properties)
+                        zs.append([[coord[2] for coord in part] for part in flat_multi_coords])
+                        ms.append([[coord[3] for coord in part] for part in flat_multi_coords])
+                    else:
+                        print(f"Unsupported geometry type for key {key}: {geom['type']}")
+                        continue
+                except Exception as e:
+                    print(f"Error processing {geom['type']} for key {key}: {e}")
+                    continue
+            
+            # Create a GeoDataFrame with both geometry and properties
+            gdf = gpd.GeoDataFrame(properties_list, geometry=geometries, crs="EPSG:4269")
+            
+            # Add Z and M values as columns
+            gdf['Z'] = zs
+            gdf['M'] = ms
+            
             return gdf
+        elif data['type'] == 'FeatureCollection':
+            # Similar processing for FeatureCollection if needed
+            pass
         else:
             print(f"Unsupported data type: {data['type']}")
             return None
@@ -155,7 +164,8 @@ for system_id in usace_system_ids[5:8]:
         topo_data = get_request(geojson_download_url)
         print(f"Topo data received: {topo_data}")  # Debug print
         gdf = topojson_to_geojson(topo_data)
-        print(gdf)
+        gdf = gdf.to_crs(epsg=4269)
+        print(gdf.crs)
         # Check if the GeoDataFrame is empty
         if gdf.empty:
             print(f"No data found for system ID: {system_id}")
@@ -170,7 +180,7 @@ for system_id in usace_system_ids[5:8]:
 
         for i, g in gdf.groupby('segmentId'):
             for i, row in g.iterrows():
-                data = process_segment(row, crs)
+                data = process_segment(row, crs="EPSG:4269")
                 elevation_data.append(data)
 
         elevation_data_full = pd.concat(elevation_data)
@@ -178,7 +188,7 @@ for system_id in usace_system_ids[5:8]:
             elevation_data_full = elevation_data_full.drop(['name'], axis=1)
         except:
             print('No name column')
-        elevation_data_full = gpd.GeoDataFrame(elevation_data_full, geometry='geometry', crs=crs)
+        elevation_data_full = gpd.GeoDataFrame(elevation_data_full, geometry='geometry', crs="EPSG:4269")
 
         # Save the profile data
         profile_gdf.to_file(f'/Users/jakegearon/CursorProjects/army_levees/data/NLD_profile_{system_id}.geojson', index=False)
