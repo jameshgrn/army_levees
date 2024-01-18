@@ -16,42 +16,80 @@ import geopandas as gpd
 from shapely.geometry import LineString
 from shapely.geometry import shape
 
-def topojson_to_geojson(topojson):
-    # Check if the geometry type is 'FeatureCollection'
-    if topojson['type'] == 'FeatureCollection':
-        # Process each feature in the collection
-        features = []
-        for feature in topojson['features']:
-            geometry = shape(feature['geometry'])
-            properties = feature['properties']
-            features.append({'geometry': geometry, 'properties': properties})
-        # Create a GeoDataFrame from the features
-        gdf = gpd.GeoDataFrame(features)
-        return gdf
+from shapely.geometry import LineString, MultiLineString
+import geopandas as gpd
+
+def topojson_to_geojson(data):
+    if 'type' in data:
+        if data['type'] == 'Topology':
+            arcs = data['arcs']
+            objects = data['objects']
+            
+            for key in objects:
+                geom = objects[key]
+                if geom['type'] == 'LineString':
+                    try:
+                        arc_indices = geom['arcs'] if isinstance(geom['arcs'], list) else [geom['arcs']]
+                        line_coords = [arcs[index] for index in arc_indices]
+                        # Slice each coordinate tuple to the first two or three elements
+                        flat_coords = [coord[:2] for sublist in line_coords for coord in sublist]  # 2D coordinates
+                        # flat_coords = [coord[:3] for sublist in line_coords for coord in sublist]  # 3D coordinates, if elevation is needed
+                        geometry = LineString(flat_coords)
+                    except Exception as e:
+                        print(f"Error processing LineString for key {key}: {e}")
+                        return None
+                elif geom['type'] == 'MultiLineString':
+                    try:
+                        multi_line_coords = [[arcs[index] for index in part] for part in geom['arcs']]
+                        # Slice each coordinate tuple to the first two or three elements
+                        flat_multi_coords = [[coord[:2] for coord in part] for part in multi_line_coords]  # 2D coordinates
+                        # flat_multi_coords = [[coord[:3] for coord in part] for part in multi_line_coords]  # 3D coordinates, if elevation is needed
+                        geometry = MultiLineString([LineString(part) for part in flat_multi_coords])
+                    except Exception as e:
+                        print(f"Error processing MultiLineString for key {key}: {e}")
+                        return None
+                else:
+                    print(f"Unsupported geometry type for key {key}: {geom['type']}")
+                    return None
+                
+                # Create a GeoDataFrame
+                gdf = gpd.GeoDataFrame([{'geometry': geometry}])
+                return gdf
+        elif data['type'] == 'FeatureCollection':
+            features = data['features']
+            geometries = [shape(feature['geometry']) for feature in features]
+            gdf = gpd.GeoDataFrame(geometry=geometries)
+            return gdf
+        else:
+            print(f"Unsupported data type: {data['type']}")
+            return None
     else:
-        # Handle other types (e.g., LineString) as before
-        line_data = topojson['geometry']['arcs'][0]
-        line_coords = [(x, y) for x, y, z, m in line_data]
-        geometry = LineString(line_coords)
-        df = pd.DataFrame(line_data, columns=['x', 'y', 'z', 'm'])
-        gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.x, df.y))
-        return gdf
+        print("No 'type' in data")
+        return None
 
 def get_request(url):
     headers = {
         'accept': 'application/json'
     }
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
+    try:
+        response = requests.get(url, headers=headers)
+        #print(f"Full response: {response.text}")  # Print the full response
+        response.raise_for_status()  # This will raise an HTTPError if the HTTP request returned an unsuccessful status code
         try:
             return response.json()  # This should return a dictionary if the response is JSON
         except json.JSONDecodeError:
             # If response is not JSON, print the response and return None
             print(f"Failed to decode JSON from response: {response.text}")
             return None
-    else:
-        print(f"Request failed with status code: {response.status_code}")
-        return None
+    except requests.exceptions.HTTPError as http_err:
+        print(f"HTTP error occurred: {http_err}")  # Print the HTTP error
+    except requests.exceptions.ConnectionError as conn_err:
+        print(f"Connection error occurred: {conn_err}")  # Print the connection error
+    except requests.exceptions.Timeout as timeout_err:
+        print(f"Timeout error occurred: {timeout_err}")  # Print the timeout error
+    except requests.exceptions.RequestException as req_err:
+        print(f"Request exception occurred: {req_err}")  # Print any other request exception
+    return None
 
 get_url = 'https://levees.sec.usace.army.mil:443/api-local/system-categories/usace-nonusace'
 
@@ -69,28 +107,53 @@ else:
 valid_system_ids = []
 invalid_system_ids = []
 
-for system_id in usace_system_ids[:15]:
+for system_id in usace_system_ids[5:8]:
     print(f"Processing system ID: {system_id}")
     
     # Get Measured Profile from NLD first
     try:
+        print(f"Attempting to get profile data for system ID: {system_id}")  # Debug print
         profile_data = get_request(f'https://levees.sec.usace.army.mil:443/api-local/system/{system_id}/route')
+        print(f"Profile data received: {profile_data}")  # Debug print
         if profile_data is None:
             print(f"No profile data found for system ID: {system_id}")
             invalid_system_ids.append(system_id)
             continue  # Skip to the next iteration of the loop
 
 
-        geojson_feature = topojson_to_geojson(profile_data)
-        geometry = shape(geojson_feature['geometry'])
-    
-        
-        profile_gdf = gpd.GeoDataFrame([{'geometry': geometry}], crs='EPSG:3857')
-        profile_gdf = profile_gdf.to_crs(epsg=4269)
+        print("Attempting to convert profile data to GeoJSON")  # Debug print
+        # Pass the 'geometry' key of the profile_data
+        geojson_feature = topojson_to_geojson(profile_data['geometry'])
+
+        # Check if the GeoDataFrame is not None and has a geometry column
+        if geojson_feature is not None and 'geometry' in geojson_feature:
+            print(f"GeoJSON feature: {geojson_feature}")  # Debug print
+            # Convert the GeoDataFrame to a GeoJSON FeatureCollection
+            geojson_feature_collection = geojson_feature.__geo_interface__
+            print(f"GeoJSON FeatureCollection: {geojson_feature_collection}")
+
+            # Now you can use the geojson_feature_collection as a dictionary
+            # representing a GeoJSON FeatureCollection
+            # For example, if you need to access the geometry of the first feature:
+            if geojson_feature_collection:
+                geometry = geojson_feature_collection['features'][0]['geometry']
+                # Assuming 'geometry' is a dictionary representing a GeoJSON geometry
+                from shapely.geometry import shape
+
+                # Convert the GeoJSON geometry to a Shapely geometry object
+                shapely_geometry = shape(geometry)
+
+                # Now create the GeoDataFrame with the Shapely geometry object
+                profile_gdf = gpd.GeoDataFrame([{'geometry': shapely_geometry}], crs='EPSG:3857')
+
+                # Convert the CRS to EPSG:4269
+                profile_gdf = profile_gdf.to_crs(epsg=4269)
         
         # If the profile is valid, proceed to get the 3DEP data
+        print("Attempting to get 3DEP data")  # Debug print
         geojson_download_url = f'https://levees.sec.usace.army.mil:443/api-local/geometries/query?type=centerline&systemId={system_id}&format=geo&props=true&coll=true'
         topo_data = get_request(geojson_download_url)
+        print(f"Topo data received: {topo_data}")  # Debug print
         gdf = topojson_to_geojson(topo_data)
         print(gdf)
         # Check if the GeoDataFrame is empty
