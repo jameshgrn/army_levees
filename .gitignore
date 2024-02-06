@@ -1,2 +1,7 @@
 all_ERDC_levees.zip
 artificiallevees.pptx
+
+.history/
+.venv/
+.whisper/
+.vscode/

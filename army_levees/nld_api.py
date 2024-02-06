@@ -19,62 +19,10 @@ from shapely.geometry import shape
 from shapely.geometry import LineString, MultiLineString
 import geopandas as gpd
 
-def topojson_to_geojson(data):
-    if 'type' in data:
-        if data['type'] == 'Topology':
-            arcs = data['arcs']
-            objects = data['objects']
-            
-            geometries = []
-            properties_list = []
-            zs = []
-            ms = []
-            
-            for key in objects:
-                geom = objects[key]
-                properties = geom.get('properties', {})  # Extract properties
-                try:
-                    if geom['type'] == 'LineString':
-                        arc_indices = geom['arcs'] if isinstance(geom['arcs'], list) else [geom['arcs']]
-                        line_coords = [arcs[index] for index in arc_indices]
-                        flat_coords = [coord for sublist in line_coords for coord in sublist]
-                        geometry = LineString([(coord[0], coord[1]) for coord in flat_coords])
-                        geometries.append(geometry)
-                        properties_list.append(properties)
-                        zs.append([coord[2] for coord in flat_coords])
-                        ms.append([coord[3] for coord in flat_coords])
-                    elif geom['type'] == 'MultiLineString':
-                        multi_line_coords = [[arcs[index] for index in part] for part in geom['arcs']]
-                        flat_multi_coords = [[coord for coord in part] for part in multi_line_coords]
-                        geometry = MultiLineString([LineString([(coord[0], coord[1]) for coord in part]) for part in flat_multi_coords])
-                        geometries.append(geometry)
-                        properties_list.append(properties)
-                        zs.append([[coord[2] for coord in part] for part in flat_multi_coords])
-                        ms.append([[coord[3] for coord in part] for part in flat_multi_coords])
-                    else:
-                        print(f"Unsupported geometry type for key {key}: {geom['type']}")
-                        continue
-                except Exception as e:
-                    print(f"Error processing {geom['type']} for key {key}: {e}")
-                    continue
-            
-            # Create a GeoDataFrame with both geometry and properties
-            gdf = gpd.GeoDataFrame(properties_list, geometry=geometries, crs="EPSG:4269")
-            
-            # Add Z and M values as columns
-            gdf['Z'] = zs
-            gdf['M'] = ms
-            
-            return gdf
-        elif data['type'] == 'FeatureCollection':
-            # Similar processing for FeatureCollection if needed
-            pass
-        else:
-            print(f"Unsupported data type: {data['type']}")
-            return None
-    else:
-        print("No 'type' in data")
-        return None
+import json
+import sys
+import topojson as tp
+
 
 def get_request(url):
     headers = {
@@ -116,13 +64,15 @@ else:
 valid_system_ids = []
 invalid_system_ids = []
 
-for system_id in usace_system_ids[5:8]:
+for system_id in usace_system_ids[:5]:
     print(f"Processing system ID: {system_id}")
     
     # Get Measured Profile from NLD first
     try:
         print(f"Attempting to get profile data for system ID: {system_id}")  # Debug print
-        profile_data = get_request(f'https://levees.sec.usace.army.mil:443/api-local/system/{system_id}/route')
+        profile_data = requests.get(f'https://levees.sec.usace.army.mil:443/api-local/system/{system_id}/route')
+        #profile_data = get_request(f'https://levees.sec.usace.army.mil:443/api-local/system/{system_id}/route')
+        
         print(f"Profile data received: {profile_data}")  # Debug print
         if profile_data is None:
             print(f"No profile data found for system ID: {system_id}")
@@ -136,10 +86,10 @@ for system_id in usace_system_ids[5:8]:
 
         # Check if the GeoDataFrame is not None and has a geometry column
         if geojson_feature is not None and 'geometry' in geojson_feature:
-            print(f"GeoJSON feature: {geojson_feature}")  # Debug print
+            #print(f"GeoJSON feature: {geojson_feature}")  # Debug print
             # Convert the GeoDataFrame to a GeoJSON FeatureCollection
             geojson_feature_collection = geojson_feature.__geo_interface__
-            print(f"GeoJSON FeatureCollection: {geojson_feature_collection}")
+            #print(f"GeoJSON FeatureCollection: {geojson_feature_collection}")
 
             # Now you can use the geojson_feature_collection as a dictionary
             # representing a GeoJSON FeatureCollection
@@ -153,10 +103,14 @@ for system_id in usace_system_ids[5:8]:
                 shapely_geometry = shape(geometry)
 
                 # Now create the GeoDataFrame with the Shapely geometry object
-                profile_gdf = gpd.GeoDataFrame([{'geometry': shapely_geometry}], crs='EPSG:3857')
-
-                # Convert the CRS to EPSG:4269
-                profile_gdf = profile_gdf.to_crs(epsg=4269)
+                if shapely_geometry is not None:
+                    profile_gdf = gpd.GeoDataFrame([{'geometry': shapely_geometry}], crs='EPSG:3857')
+                    # Convert the CRS to EPSG:4269
+                    profile_gdf = profile_gdf.to_crs(epsg=4269)
+                else:
+                    print(f"No valid geometry found for system ID: {system_id}")
+                    invalid_system_ids.append(system_id)
+                    continue  # Skip to the next iteration of the loop
         
         # If the profile is valid, proceed to get the 3DEP data
         print("Attempting to get 3DEP data")  # Debug print
@@ -164,11 +118,16 @@ for system_id in usace_system_ids[5:8]:
         topo_data = get_request(geojson_download_url)
         print(f"Topo data received: {topo_data}")  # Debug print
         gdf = topojson_to_geojson(topo_data)
-        gdf = gdf.to_crs(epsg=4269)
-        print(gdf.crs)
-        # Check if the GeoDataFrame is empty
-        if gdf.empty:
-            print(f"No data found for system ID: {system_id}")
+        if gdf is not None:
+            gdf = gdf.to_crs(epsg=4269)
+            print(gdf.crs)
+            # Check if the GeoDataFrame is empty
+            if gdf.empty:
+                print(f"No data found for system ID: {system_id}")
+                invalid_system_ids.append(system_id)
+                continue  # Skip to the next iteration of the loop
+        else:
+            print(f"Failed to convert topo data to GeoDataFrame for system ID: {system_id}")
             invalid_system_ids.append(system_id)
             continue  # Skip to the next iteration of the loop
         
@@ -208,3 +167,18 @@ with open('valid_system_ids.txt', 'w') as f:
 with open('invalid_system_ids.txt', 'w') as f:
     for system_id in invalid_system_ids:
         f.write(f"{system_id}\n")
+
+#%%
+import requests
+import topojson
+import json
+
+system_id = 4005000012
+profile_data = requests.get(f'https://levees.sec.usace.army.mil:443/api-local/system/{system_id}/route')
+test = profile_data.json()
+id = test['id']
+# Assuming 'test' is a GeoJSON-like structure and you want to convert it to TopoJSON
+topology = topojson.Topology(data=test['geometry'], object_name='collection')
+gdf = topology.to_gdf()
+#gdf.to_file(f'/Users/jakegearon/CursorProjects/army_levees/data/3DEP_{system_id}.geojson', index=False)
+# %%
