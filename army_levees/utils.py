@@ -14,7 +14,9 @@ from shapely.geometry import Point
 import matplotlib.pyplot as plt
 import geopandas as gpd
 import pandas as pd
-import py3dep 
+import py3dep
+from pyproj import Transformer
+import geopandas as gpd
 from shapely.geometry import MultiLineString, LineString
 import numpy as np
 
@@ -23,42 +25,6 @@ def calculate_cumulative_distance(points):
     for i in range(1, len(points)):
         distances.append(points[i].distance(points[i-1]) + distances[-1])
     return distances
-
-def plot_segment(segment_id, column='elevation'):
-    el_df = None  # Initialize el_df to ensure it's in the function's scope
-    try:
-        el_df = elevation_data_full.query(f'segmentId == {segment_id}')
-        el_df = gpd.GeoDataFrame(el_df, geometry=gpd.points_from_xy(el_df['x'], el_df['y']), crs=5070)
-        # Convert to a UTM CRS for accurate distance measurements
-        el_df = el_df.to_crs(epsg=4979)  # Replace with the correct UTM zone for your area
-        if len(el_df) > 1:
-            # Sort by latitude (y) since the river flows south
-            el_df.sort_values(by='y', ascending=True, inplace=True)
-            max_height_df = el_df.groupby('distance')[column].max().reset_index()
-            # Apply a rolling median filter
-            max_height_df[column] = max_height_df[column].rolling(window=6, center=True).median().fillna(method='bfill').fillna(method='ffill')
-            # Convert distance and height to feet
-            max_height_df['distance'] = max_height_df['distance'] * 3.281
-            max_height_df[column] = max_height_df[column] * 3.281
-            # Plot the maximum elevation for each distance
-            plt.plot(max_height_df['distance'], max_height_df[column], 'o-', alpha=0.5, markersize=3)
-            # Calculate the standard deviation and mean residuals
-            std_dev = np.std(max_height_df[column])
-            residuals = max_height_df[column] - np.poly1d(np.polyfit(max_height_df['distance'], max_height_df[column], 1))(max_height_df['distance'])
-            mean_residuals = np.mean(residuals)
-            # Add plot details
-            system_name = el_df['systemName'].iloc[0]
-            plt.title(f'Segment ID: {segment_id} - System Name: {system_name}')
-            plt.text(0.05, 0.95, f'Standard Deviation: {std_dev:.2f}', transform=plt.gca().transAxes)
-            plt.text(0.05, 0.90, f'Mean Residuals: {mean_residuals:.2f}', transform=plt.gca().transAxes)
-            plt.xlabel('Distance along river (ft)')
-            plt.ylabel(f'Maximum {column} (ft)')
-            plt.show()
-            plt.close()
-        return el_df
-    except Exception as e:
-        print(f"Error processing segment: {e}")
-        return el_df  # Return el_df even if it's None to handle the exception gracefully
 
 def json_to_geodataframe(json_response):
     # Initialize lists to store the parsed data
@@ -80,7 +46,7 @@ def json_to_geodataframe(json_response):
     })
     
     # Convert the DataFrame to a GeoDataFrame, setting the geometry
-    gdf = gpd.GeoDataFrame(df, geometry=points, crs="EPSG:3857")
+    gdf = gpd.GeoDataFrame(df, geometry=points, crs="EPSG:26914")
     
     return gdf
 
@@ -110,3 +76,79 @@ def process_segment(row, crs):
         return elevation_gdf
     except ValueError as e:
         print(f"Caught an error: {e}")
+        
+
+def get_request(url):
+    headers = {
+        'accept': 'application/json'
+    }
+    try:
+        response = requests.get(url, headers=headers)
+        #print(f"Full response: {response.text}")  # Print the full response
+        response.raise_for_status()  # This will raise an HTTPError if the HTTP request returned an unsuccessful status code
+        try:
+            return response.json()  # This should return a dictionary if the response is JSON
+        except json.JSONDecodeError:
+            # If response is not JSON, print the response and return None
+            print(f"Failed to decode JSON from response: {response.text}")
+            return None
+    except requests.exceptions.HTTPError as http_err:
+        print(f"HTTP error occurred: {http_err}")  # Print the HTTP error
+    except requests.exceptions.ConnectionError as conn_err:
+        print(f"Connection error occurred: {conn_err}")  # Print the connection error
+    except requests.exceptions.Timeout as timeout_err:
+        print(f"Timeout error occurred: {timeout_err}")  # Print the timeout error
+    except requests.exceptions.RequestException as req_err:
+        print(f"Request exception occurred: {req_err}")  # Print any other request exception
+    return None
+
+
+
+def reproject_dataframe_geometries(df, source_crs="EPSG:4326", target_crs="EPSG:5048"):
+    """
+    Transforms the elevation values in a GeoDataFrame from one vertical datum to another.
+
+    Parameters:
+    - df: GeoDataFrame with point geometries including 'longitude', 'latitude', and 'elevation' columns.
+    - source_crs: The current CRS of the GeoDataFrame. Defaults to EPSG:4269.
+    - target_crs: The target CRS to which the geometries will be reprojected. Defaults to EPSG:4326.
+
+    Returns:
+    - A new GeoDataFrame with transformed elevation values.
+    """
+    # Initialize a transformer object with the source and target CRS
+    transformer = Transformer.from_crs(source_crs, target_crs, always_xy=True)
+    
+    def transform_elevation(row):
+        geom = row['geometry']
+        elevation = row['elevation']
+        # Use the centroid for MultiLineString or the geometry itself if it's a Point
+        representative_point = geom.centroid if isinstance(geom, MultiLineString) else geom
+        # Transform the elevation value using the transformer
+        new_elevation = transformer.transform(representative_point.x, representative_point.y, elevation)
+        return new_elevation[2]  # The third element is the transformed elevation
+        
+    # Apply the function to each row in the DataFrame
+    df['transformed_elevation'] = df.apply(transform_elevation, axis=1)
+    return df
+
+def plot_profiles(profile_gdf, elevation_data_full):
+    # Ensure data is sorted by 'distance_along_track' to represent downstream direction
+    profile_gdf_sorted = profile_gdf.sort_values(by='distance_along_track')
+    elevation_data_sorted = elevation_data_full.sort_values(by='distance_along_track')
+    
+    # Plotting
+    plt.figure(figsize=(10, 6))
+    
+    # Plot profile_gdf
+    plt.plot(profile_gdf_sorted['distance_along_track'], profile_gdf_sorted['transformed_elevation'], label='NLD Profile', color='blue', marker='o', linestyle='-', markersize=5)
+    
+    # Plot elevation_data_full
+    plt.plot(elevation_data_sorted['distance_along_track'], elevation_data_sorted['elevation'], label='3DEP Profile', color='red', marker='x', linestyle='--', markersize=5)
+    
+    plt.title('Elevation Profiles Comparison')
+    plt.xlabel('Distance Along Track (m)')
+    plt.ylabel('Elevation (m)')
+    plt.legend()
+    plt.grid(True)
+    plt.show()

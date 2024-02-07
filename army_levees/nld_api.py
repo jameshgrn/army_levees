@@ -1,76 +1,16 @@
 #%%
 import requests
 import json
-from get_3dep import process_segment
 import numpy as np
-import cartopy.feature as cfeatures
-import cartopy.crs as ccrs
-import geopandas as gpd
-import matplotlib.colors as colors
-import matplotlib.pyplot as plt
-from cartopy.io.img_tiles import GoogleTiles
-from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
-from matplotlib_scalebar.scalebar import ScaleBar
-import matplotlib.patheffects as pe
 import pandas as pd
 import geopandas as gpd
-from shapely.geometry import LineString
-from shapely.geometry import shape
-from utils import json_to_geodataframe, plot_segment
-
+import matplotlib.pyplot as plt
+from pyproj import Transformer
+import py3dep
 from shapely.geometry import LineString, MultiLineString
-import geopandas as gpd
-
-import json
-import sys
-import topojson as tp
-
-
-def get_request(url):
-    headers = {
-        'accept': 'application/json'
-    }
-    try:
-        response = requests.get(url, headers=headers)
-        #print(f"Full response: {response.text}")  # Print the full response
-        response.raise_for_status()  # This will raise an HTTPError if the HTTP request returned an unsuccessful status code
-        try:
-            return response.json()  # This should return a dictionary if the response is JSON
-        except json.JSONDecodeError:
-            # If response is not JSON, print the response and return None
-            print(f"Failed to decode JSON from response: {response.text}")
-            return None
-    except requests.exceptions.HTTPError as http_err:
-        print(f"HTTP error occurred: {http_err}")  # Print the HTTP error
-    except requests.exceptions.ConnectionError as conn_err:
-        print(f"Connection error occurred: {conn_err}")  # Print the connection error
-    except requests.exceptions.Timeout as timeout_err:
-        print(f"Timeout error occurred: {timeout_err}")  # Print the timeout error
-    except requests.exceptions.RequestException as req_err:
-        print(f"Request exception occurred: {req_err}")  # Print any other request exception
-    return None
-
-
-def plot_profiles(profile_gdf, elevation_data_full):
-    # Ensure data is sorted by 'distance_along_track' to represent downstream direction
-    profile_gdf_sorted = profile_gdf.sort_values(by='distance_along_track')
-    elevation_data_sorted = elevation_data_full.sort_values(by='distance_along_track')
-    
-    # Plotting
-    plt.figure(figsize=(10, 6))
-    
-    # Plot profile_gdf
-    plt.plot(profile_gdf_sorted['distance_along_track'], profile_gdf_sorted['elevation'], label='NLD Profile', color='blue', marker='o', linestyle='-', markersize=5)
-    
-    # Plot elevation_data_full
-    plt.plot(elevation_data_sorted['distance_along_track'], elevation_data_sorted['elevation'], label='3DEP Profile', color='red', marker='x', linestyle='--', markersize=5)
-    
-    plt.title('Elevation Profiles Comparison')
-    plt.xlabel('Distance Along Track (m)')
-    plt.ylabel('Elevation (m)')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+from utils import json_to_geodataframe, get_request, plot_profiles
+# Set CRS variable
+CRS = "EPSG:26914"
 
 get_url = 'https://levees.sec.usace.army.mil:443/api-local/system-categories/usace-nonusace'
 
@@ -88,7 +28,7 @@ else:
 valid_system_ids = []
 invalid_system_ids = []
 
-for system_id in usace_system_ids[2:5]:
+for system_id in usace_system_ids[15:30]:
     print(f"Processing system ID: {system_id}")
     
     # Get Measured Profile from NLD first
@@ -105,7 +45,9 @@ for system_id in usace_system_ids[2:5]:
         json_response = profile_data.json()
         if json_response is not None:
             profile_gdf = json_to_geodataframe(json_response)
-            profile_gdf = profile_gdf.to_crs("EPSG:4269")
+            profile_gdf = profile_gdf.to_crs(CRS)
+            nld_spacing = np.round(profile_gdf.distance_along_track.diff().mean(), 0)
+
             # Check if all elevation values are 0
             if (profile_gdf['elevation'].astype(float) == 0).all():
                 print(f"All elevation values are 0 for system ID: {system_id}")
@@ -124,36 +66,61 @@ for system_id in usace_system_ids[2:5]:
     except Exception as e:
         print(f"Failed to get profile data for system ID: {system_id}: {e}")
         invalid_system_ids.append(system_id)
+    
+    zipped_coords = zip(profile_gdf.geometry.x, profile_gdf.geometry.y)
+    # Convert zipped coordinates to a list of tuples
+    coords_list = list(zipped_coords)
+    elevations = py3dep.elevation_bycoords(coords_list, crs=CRS)
+    # Create a DataFrame from coords_list
+    coords_df = pd.DataFrame(coords_list, columns=['x', 'y'])
 
-    elevation_data = []
-    for i, g in threedep_gdf.groupby('segmentId'):
-        for i, row in g.iterrows():
-            data = process_segment(row, crs="EPSG:4269")
-            elevation_data.append(data)
+    # Add the elevations list as a new column to this DataFrame
+    coords_df['elevation'] = elevations
 
-    elevation_data_full = pd.concat(elevation_data)
+    # Convert the DataFrame to a GeoDataFrame
+    elevation_data_full = gpd.GeoDataFrame(coords_df, geometry=gpd.points_from_xy(coords_df['x'], coords_df['y']), crs=CRS)
+
+    # Set geometry as index for both GeoDataFrames
+    profile_gdf.set_index('geometry', inplace=True)
+    elevation_data_full.set_index('geometry', inplace=True)
+
+    # Join 'distance_along_track' from profile_gdf to elevation_data_full
+    # Since the indexes are geometries, this operation aligns matching geometries
+    elevation_data_full = elevation_data_full.join(profile_gdf['distance_along_track'], how='left')
+
+    # Reset index if needed to make 'geometry' a column again
+    elevation_data_full.reset_index(inplace=True)
+    profile_gdf.reset_index(inplace=True)
     try:
         elevation_data_full = elevation_data_full.drop(['name'], axis=1)
     except:
         print('No name column')
-    elevation_data_full = gpd.GeoDataFrame(elevation_data_full, geometry='geometry', crs="EPSG:4269")
-
+    elevation_data_full = gpd.GeoDataFrame(elevation_data_full, geometry='geometry', crs=CRS)
     profile_gdf.elevation = profile_gdf.elevation.astype(float)
     profile_gdf.distance_along_track = profile_gdf.distance_along_track.astype(float)
     elevation_data_full.elevation = elevation_data_full.elevation.astype(float)
     elevation_data_full.rename(columns={'distance': 'distance_along_track'}, inplace=True)
     elevation_data_full.distance_along_track = elevation_data_full.distance_along_track.astype(float)
-    # Save the profile data
-    profile_gdf.to_file(f'/Users/jakegearon/CursorProjects/army_levees/data/NLD_profile_{system_id}.geojson', index=False)
-    elevation_data_full.to_file(f'/Users/jakegearon/CursorProjects/army_levees/data/3DEP_{system_id}.geojson', index=False)
-    # If the system ID is valid, add it to the valid_system_ids list
+    
+    # Check if elevation values between profiles are significantly different
+    max_profile_elevation = profile_gdf['elevation'].max()
+    max_elevation_data_full = elevation_data_full['elevation'].max()
+    if abs(max_profile_elevation - max_elevation_data_full) > 20:  # Arbitrary threshold to check significant difference
+        # Assuming the larger value is in feet, convert it to meters
+        if max_profile_elevation > max_elevation_data_full:
+            profile_gdf['elevation'] = profile_gdf['elevation'] * 0.3048  # Convert feet to meters
+    
+    # elevation_data_full['distance_along_track'] = elevation_data_full['distance_along_track'] * .3048
+    # profile_gdf['distance_along_track'] = profile_gdf['distance_along_track'] * .3048
     valid_system_ids.append(system_id)
-    plot_profiles(profile_gdf, elevation_data_full)
-
-
-
-# Call the function with the GeoDataFrames
-        
+    plt.plot(elevation_data_full['distance_along_track'], elevation_data_full['elevation'], label='3DEP Profile', color='red', marker='x', linestyle='--', markersize=5)
+    plt.plot(profile_gdf['distance_along_track'], profile_gdf['elevation'], label='NLD Profile', color='blue', marker='o', linestyle='-', markersize=5)
+    plt.title('Elevation Profiles Comparison')
+    plt.xlabel('Distance Along Track (m)')
+    plt.ylabel('Elevation (m)')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
 # Save valid and invalid system IDs to files
 with open('valid_system_ids.txt', 'w') as f:
@@ -163,6 +130,23 @@ with open('valid_system_ids.txt', 'w') as f:
 with open('invalid_system_ids.txt', 'w') as f:
     for system_id in invalid_system_ids:
         f.write(f"{system_id}\n")
+
+# %%
+source_crs = "EPSG:4979"
+target_crs = "EPSG:5498"
+transformer = Transformer.from_crs(source_crs, target_crs, always_xy=True)
+
+def transform_elevation(row):
+    geom = row['geometry']
+    elevation = row['elevation']
+    # Use the centroid for MultiLineString or the geometry itself if it's a Point
+    representative_point = geom.centroid if isinstance(geom, MultiLineString) else geom
+    # Transform the elevation value using the transformer
+    new_elevation = transformer.transform(representative_point.x, representative_point.y, elevation)
+    return new_elevation[2]  # The third element is the transformed elevation
+    
+# Apply the function to each row in the DataFrame
+elevation_data_full['transformed_elevation'] = elevation_data_full.apply(transform_elevation, axis=1)
 
 
 # %%
