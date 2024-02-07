@@ -86,47 +86,7 @@ import matplotlib.patheffects as pe
 # valdf = pd.read_csv('/Users/jakegearon/CursorProjects/SideStatus/breaches/system_3705000033_profile.csv')
 # spacing = np.floor(valdf['Distance'].diff().mean())
 
-def calculate_cumulative_distance(points):
-    distances = [0]
-    for i in range(1, len(points)):
-        distances.append(points[i].distance(points[i-1]) + distances[-1])
-    return distances
 
-def plot_segment(segment_id, column='elevation'):
-    el_df = None  # Initialize el_df to ensure it's in the function's scope
-    try:
-        el_df = elevation_data_full.query(f'segmentId == {segment_id}')
-        el_df = gpd.GeoDataFrame(el_df, geometry=gpd.points_from_xy(el_df['x'], el_df['y']), crs=5070)
-        # Convert to a UTM CRS for accurate distance measurements
-        el_df = el_df.to_crs(epsg=4979)  # Replace with the correct UTM zone for your area
-        if len(el_df) > 1:
-            # Sort by latitude (y) since the river flows south
-            el_df.sort_values(by='y', ascending=True, inplace=True)
-            max_height_df = el_df.groupby('distance')[column].max().reset_index()
-            # Apply a rolling median filter
-            max_height_df[column] = max_height_df[column].rolling(window=6, center=True).median().fillna(method='bfill').fillna(method='ffill')
-            # Convert distance and height to feet
-            max_height_df['distance'] = max_height_df['distance'] * 3.281
-            max_height_df[column] = max_height_df[column] * 3.281
-            # Plot the maximum elevation for each distance
-            plt.plot(max_height_df['distance'], max_height_df[column], 'o-', alpha=0.5, markersize=3)
-            # Calculate the standard deviation and mean residuals
-            std_dev = np.std(max_height_df[column])
-            residuals = max_height_df[column] - np.poly1d(np.polyfit(max_height_df['distance'], max_height_df[column], 1))(max_height_df['distance'])
-            mean_residuals = np.mean(residuals)
-            # Add plot details
-            system_name = el_df['systemName'].iloc[0]
-            plt.title(f'Segment ID: {segment_id} - System Name: {system_name}')
-            plt.text(0.05, 0.95, f'Standard Deviation: {std_dev:.2f}', transform=plt.gca().transAxes)
-            plt.text(0.05, 0.90, f'Mean Residuals: {mean_residuals:.2f}', transform=plt.gca().transAxes)
-            plt.xlabel('Distance along river (ft)')
-            plt.ylabel(f'Maximum {column} (ft)')
-            plt.show()
-            plt.close()
-        return el_df
-    except Exception as e:
-        print(f"Error processing segment: {e}")
-        return el_df  # Return el_df even if it's None to handle the exception gracefully
 
 #eldf = plot_segment(3705000033)
 # # %%
