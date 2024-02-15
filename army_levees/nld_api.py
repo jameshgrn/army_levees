@@ -34,18 +34,27 @@ def get_usace_system_ids(url):
 def process_system_ids(system_ids, show_plot=False):
     valid_system_ids, invalid_system_ids, contains_zero_ids, large_offset_ids = [], [], [], []
     for system_id in tqdm(system_ids, desc="Processing system IDs"):
-    for system_id in tqdm(system_ids, desc="Processing system IDs", dynamic_ncols=True, file=sys.stderr):
         profile_data, profile_gdf, skip_reason = get_profile_data(system_id)
-        if profile_data:
+        if skip_reason:
+            print(f"Skipped system ID: {system_id} due to {skip_reason}")
+            if skip_reason == 'contains_zero':
+                contains_zero_ids.append(system_id)
+            continue  # Skip further processing for this ID
+        
+        # Ensure profile_gdf is not None before proceeding
+        if profile_gdf is not None:
             elevation_data_full, profile_gdf, mean_elevation_3dep, mean_elevation_nld, offset = get_elevation_data(profile_gdf)
             if offset > 10:  # Assuming 10 units (e.g., meters) as the threshold for a large offset
                 large_offset_ids.append(system_id)
+                print(f"Large offset for system ID: {system_id}")
                 continue
+            
             if show_plot:
                 plot_elevation_data(elevation_data_full, profile_gdf)
             valid_system_ids.append(system_id)
         else:
             invalid_system_ids.append(system_id)
+    
     save_skipped_ids(contains_zero_ids, 'contains_0.txt')
     save_skipped_ids(large_offset_ids, 'large_offset.txt')
     return valid_system_ids, invalid_system_ids
@@ -57,8 +66,6 @@ def get_profile_data(system_id):
             profile_gdf = json_to_geodataframe(profile_data).to_crs(CRS)
             if (profile_gdf['elevation'].astype(float) == 0).any():
                 return None, None, 'contains_zero'
-            if (profile_gdf['offset'].astype(float) > 10).any():
-                return None, None, 'large_offset'
             return profile_data, profile_gdf, None
     except Exception as e:
         print(f"Failed to get profile data for system ID: {system_id}: {e}")
@@ -98,7 +105,7 @@ def save_skipped_ids(skipped_ids, filename):
         f.writelines(f"{id}\n" for id in skipped_ids)
 
 usace_system_ids = get_usace_system_ids(get_url)
-valid_system_ids, invalid_system_ids = process_system_ids(usace_system_ids, show_plot=True, n_system_ids=len(usace_system_ids))
+valid_system_ids, invalid_system_ids = process_system_ids(usace_system_ids, show_plot=False)
 save_system_ids(valid_system_ids, invalid_system_ids)
 
 
