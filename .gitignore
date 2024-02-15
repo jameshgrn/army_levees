@@ -7,3 +7,4 @@ artificiallevees.pptx
 .vscode/
 
 *.parquet
+.DS_Store
