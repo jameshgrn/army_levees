@@ -46,7 +46,7 @@ def json_to_geodataframe(json_response):
     })
     
     # Convert the DataFrame to a GeoDataFrame, setting the geometry
-    gdf = gpd.GeoDataFrame(df, geometry=points, crs="EPSG:26914")
+    gdf = gpd.GeoDataFrame(df, geometry=points, crs="EPSG:3857")
     
     return gdf
 
@@ -141,10 +141,10 @@ def plot_profiles(profile_gdf, elevation_data_full):
     plt.figure(figsize=(10, 6))
     
     # Plot profile_gdf
-    plt.plot(profile_gdf_sorted['distance_along_track'], profile_gdf_sorted['transformed_elevation'], label='NLD Profile', color='blue', marker='o', linestyle='-', markersize=5)
+    plt.plot(profile_gdf_sorted['distance_along_track'], profile_gdf_sorted['transformed_elevation'], label='NLD Profile', color='blue', marker='o', linestyle='-', markersize=1)
     
     # Plot elevation_data_full
-    plt.plot(elevation_data_sorted['distance_along_track'], elevation_data_sorted['elevation'], label='3DEP Profile', color='red', marker='x', linestyle='--', markersize=5)
+    plt.plot(elevation_data_sorted['distance_along_track'], elevation_data_sorted['elevation'], label='3DEP Profile', color='red', marker='x', linestyle='--', markersize=1)
     
     plt.title('Elevation Profiles Comparison')
     plt.xlabel('Distance Along Track (m)')

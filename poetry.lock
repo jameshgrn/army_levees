@@ -2067,6 +2067,31 @@ files = [
 ]
 
 [[package]]
+name = "osmnx"
+version = "1.9.1"
+description = "Download, model, analyze, and visualize street networks and other geospatial features from OpenStreetMap"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "osmnx-1.9.1-py3-none-any.whl", hash = "sha256:804790b4963f915ca172f56ef27a9bd62347c44616902a1c8a12dc3d94737f4b"},
+    {file = "osmnx-1.9.1.tar.gz", hash = "sha256:0c28e32755b27110b0dc140b74f7b66ba9d037f4a246dab8fb50d9383334e311"},
+]
+
+[package.dependencies]
+geopandas = ">=0.12"
+networkx = ">=2.5"
+numpy = ">=1.20"
+pandas = ">=1.1"
+requests = ">=2.27"
+shapely = ">=2.0"
+
+[package.extras]
+entropy = ["scipy (>=1.5)"]
+neighbors = ["scikit-learn (>=0.23)", "scipy (>=1.5)"]
+raster = ["gdal", "rasterio (>=1.3)"]
+visualization = ["matplotlib (>=3.5)"]
+
+[[package]]
 name = "owslib"
 version = "0.29.3"
 description = "OGC Web Service utility library"
@@ -3613,4 +3638,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.9"
-content-hash = "05c7b67215cd5a61cf1d7365839201871c288c7fbe77d61f4a4ca9d22b9f3ce4"
+content-hash = "e7a78ca04a8918ee4537e1970585102e23f2a58da609088e2b2687f2a6e6ac25"
