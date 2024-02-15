@@ -40,7 +40,6 @@ norm = colors.Normalize(vmin=plot_df['elevation'].min(), vmax=plot_df['elevation
 # Now plot your data
 plot_df.plot(ax=ax, column='elevation', cmap='cool', legend=True, alpha=0.5, norm=norm)
 
-# %%
 
 filepath = '../elevation_data.parquet'
 system_ids = df['system_id'].unique()  # Replace with actual system IDs you're interested in

@@ -52,14 +52,15 @@ def read_and_parse_elevation_data(filepath, system_ids=None):
 
 def plot_profiles(profile_gdf, elevation_data_full):
     # Sort data by 'distance_along_track'
+    system_id = profile_gdf['system_id'].iloc[0]
     profile_gdf_sorted = profile_gdf.sort_values(by='distance_along_track')
     elevation_data_sorted = elevation_data_full.sort_values(by='distance_along_track')
-    
+    print(system_id)
     # Plotting
     plt.figure(figsize=(10, 6))
     plt.plot(profile_gdf_sorted['distance_along_track'], profile_gdf_sorted['elevation'], label='NLD Profile', color='blue', marker='o', linestyle='-', markersize=1)
     plt.plot(elevation_data_sorted['distance_along_track'], elevation_data_sorted['elevation'], label='3DEP Profile', color='red', marker='x', linestyle='--', markersize=1)
-    plt.title('Elevation Profiles Comparison')
+    plt.title(f'Elevation Profiles Comparison {system_id}')
     plt.xlabel('Distance Along Track (m)')
     plt.ylabel('Elevation (m)')
     plt.legend()
