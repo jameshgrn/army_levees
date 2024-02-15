@@ -8,6 +8,7 @@ from cartopy.io.img_tiles import GoogleTiles
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 from matplotlib_scalebar.scalebar import ScaleBar
 import matplotlib.patheffects as pe
+from utils import read_and_parse_elevation_data
 
 df = gpd.read_parquet('elevation_data.parquet')
 
@@ -38,5 +39,16 @@ norm = colors.Normalize(vmin=plot_df['elevation'].min(), vmax=plot_df['elevation
 
 # Now plot your data
 plot_df.plot(ax=ax, column='elevation', cmap='cool', legend=True, alpha=0.5, norm=norm)
+
+# %%
+
+filepath = 'elevation_data.parquet'
+system_ids = [2005100805]  # Replace with actual system IDs you're interested in
+# Assuming 'source' column exists and can differentiate between 'nld' and '3dep' data
+elevation_data_df = read_and_parse_elevation_data(filepath, system_ids)
+if elevation_data_df is not None:
+    df_nld = elevation_data_df[elevation_data_df['source'] == 'nld']
+    # df_nld['elevation'] = df_nld['elevation'] * .3048
+    df_3dep = elevation_data_df[elevation_data_df['source'] == 'tep']
 
 # %%

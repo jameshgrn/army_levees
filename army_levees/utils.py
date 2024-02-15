@@ -23,6 +23,32 @@ def json_to_geodataframe(json_response):
     gdf = gpd.GeoDataFrame(df, geometry='geometry', crs="EPSG:3857")
     return gdf
         
+def read_and_parse_elevation_data(filepath, system_ids=None):
+    import geopandas as gpd
+    """
+    Reads elevation data for specified system IDs from a Parquet file without loading the entire DataFrame into memory.
+
+    Parameters:
+    - filepath: str, path to the Parquet file containing elevation data.
+    - system_ids: list of str, system IDs to filter the data. If None, all data is loaded.
+
+    Returns:
+    - DataFrame with parsed elevation data for the specified system IDs.
+    """
+    try:
+        # If system_ids is provided, prepare a filter
+        if system_ids:
+            filters = [('system_id', 'in', system_ids)]
+            # Use the 'columns' parameter if you want to load specific columns only, e.g., ['system_id', 'elevation']
+            df = gpd.read_parquet(filepath, filters=filters)
+        else:
+            df = gpd.read_parquet(filepath)
+    except Exception as e:
+        print(f"Failed to read the Parquet file: {e}")
+        return None
+
+    # Further processing can be done here if needed
+    return df
 
 def plot_profiles(profile_gdf, elevation_data_full):
     # Sort data by 'distance_along_track'
