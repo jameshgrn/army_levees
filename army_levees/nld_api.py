@@ -115,7 +115,7 @@ def save_skipped_ids(skipped_ids, filename):
 
 if __name__ == "__main__":
     usace_system_ids = get_usace_system_ids(get_url)
-    df_list = process_system_ids(usace_system_ids, show_plot=False)
+    df_list = process_system_ids(usace_system_ids, show_plot=False, n_system_ids=50)
     df = pd.concat(df_list)
     df = gpd.GeoDataFrame(df, geometry='geometry', crs=CRS)
 
@@ -129,6 +129,6 @@ if __name__ == "__main__":
         'source': 'category',
     })
     print(df.system_id.unique())
-    df.to_parquet('elevation_data_full.parquet')
+    df.to_parquet('elevation_data.parquet')
 
 # %%
