@@ -4,6 +4,8 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from shapely.geometry import LineString, MultiLineString
 from utils import json_to_geodataframe, get_request, plot_profiles
+from tqdm import tqdm
+import sys
 
 CRS = "EPSG:4269"
 get_url = 'https://levees.sec.usace.army.mil:443/api-local/system-categories/usace-nonusace'
@@ -28,17 +30,24 @@ def get_usace_system_ids(url):
         print("Request failed:", e)
         return []
 
-def process_system_ids(system_ids):
-    valid_system_ids, invalid_system_ids = [], []
-    for system_id in random.sample(system_ids, min(10, len(system_ids))):
-        print(f"Processing system ID: {system_id}")
-        profile_data, profile_gdf = get_profile_data(system_id)
+
+def process_system_ids(system_ids, show_plot=False):
+    valid_system_ids, invalid_system_ids, contains_zero_ids, large_offset_ids = [], [], [], []
+    for system_id in tqdm(system_ids, desc="Processing system IDs"):
+    for system_id in tqdm(system_ids, desc="Processing system IDs", dynamic_ncols=True, file=sys.stderr):
+        profile_data, profile_gdf, skip_reason = get_profile_data(system_id)
         if profile_data:
-            elevation_data_full, profile_gdf = get_elevation_data(profile_gdf)
-            plot_elevation_data(elevation_data_full, profile_gdf)
+            elevation_data_full, profile_gdf, mean_elevation_3dep, mean_elevation_nld, offset = get_elevation_data(profile_gdf)
+            if offset > 10:  # Assuming 10 units (e.g., meters) as the threshold for a large offset
+                large_offset_ids.append(system_id)
+                continue
+            if show_plot:
+                plot_elevation_data(elevation_data_full, profile_gdf)
             valid_system_ids.append(system_id)
         else:
             invalid_system_ids.append(system_id)
+    save_skipped_ids(contains_zero_ids, 'contains_0.txt')
+    save_skipped_ids(large_offset_ids, 'large_offset.txt')
     return valid_system_ids, invalid_system_ids
 
 def get_profile_data(system_id):
@@ -46,11 +55,14 @@ def get_profile_data(system_id):
         profile_data = requests.get(f'https://levees.sec.usace.army.mil:443/api-local/system/{system_id}/route').json()
         if profile_data:
             profile_gdf = json_to_geodataframe(profile_data).to_crs(CRS)
-            if not (profile_gdf['elevation'].astype(float) == 0).all():
-                return profile_data, profile_gdf
+            if (profile_gdf['elevation'].astype(float) == 0).any():
+                return None, None, 'contains_zero'
+            if (profile_gdf['offset'].astype(float) > 10).any():
+                return None, None, 'large_offset'
+            return profile_data, profile_gdf, None
     except Exception as e:
         print(f"Failed to get profile data for system ID: {system_id}: {e}")
-    return None, None
+    return None, None, None
 
 def get_elevation_data(profile_gdf):
     coords_list = list(zip(profile_gdf.geometry.x, profile_gdf.geometry.y))
@@ -58,7 +70,12 @@ def get_elevation_data(profile_gdf):
     coords_df = pd.DataFrame(coords_list, columns=['x', 'y']).assign(elevation=elevations)
     elevation_data_full = gpd.GeoDataFrame(coords_df, geometry=gpd.points_from_xy(coords_df['x'], coords_df['y']), crs=CRS)
     elevation_data_full = elevation_data_full.join(profile_gdf.set_index('geometry')['distance_along_track'], on='geometry').reset_index(drop=True)
-    return elevation_data_full, profile_gdf
+    mean_elevation_3dep = elevation_data_full['elevation'].mean()
+    mean_elevation_nld = profile_gdf['elevation'].mean()
+    # Calculate the offset
+    offset = abs(mean_elevation_3dep - mean_elevation_nld)
+    return elevation_data_full, profile_gdf, mean_elevation_3dep, mean_elevation_nld, offset
+
 
 def plot_elevation_data(elevation_data_full, profile_gdf):
     plt.plot(elevation_data_full['distance_along_track'], elevation_data_full['elevation'], 'rx--', label='3DEP Profile', markersize=5)
@@ -76,8 +93,12 @@ def save_system_ids(valid_system_ids, invalid_system_ids):
     with open('invalid_system_ids.txt', 'w') as f:
         f.writelines(f"{id}\n" for id in invalid_system_ids)
 
+def save_skipped_ids(skipped_ids, filename):
+    with open(filename, 'w') as f:
+        f.writelines(f"{id}\n" for id in skipped_ids)
+
 usace_system_ids = get_usace_system_ids(get_url)
-valid_system_ids, invalid_system_ids = process_system_ids(usace_system_ids)
+valid_system_ids, invalid_system_ids = process_system_ids(usace_system_ids, show_plot=True, n_system_ids=len(usace_system_ids))
 save_system_ids(valid_system_ids, invalid_system_ids)
 
 
