@@ -8,9 +8,9 @@ from cartopy.io.img_tiles import GoogleTiles
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 from matplotlib_scalebar.scalebar import ScaleBar
 import matplotlib.patheffects as pe
-from utils import read_and_parse_elevation_data
+from utils import read_and_parse_elevation_data, plot_profiles
 
-df = gpd.read_parquet('elevation_data.parquet')
+df = gpd.read_parquet('../elevation_data.parquet')
 
 # Use boolean indexing for filtering rows
 plot_df = df[df['source'] == "tep"].groupby('system_id').first()
@@ -42,13 +42,16 @@ plot_df.plot(ax=ax, column='elevation', cmap='cool', legend=True, alpha=0.5, nor
 
 # %%
 
-filepath = 'elevation_data.parquet'
-system_ids = [2005100805]  # Replace with actual system IDs you're interested in
+filepath = '../elevation_data.parquet'
+system_ids = df['system_id'].unique()  # Replace with actual system IDs you're interested in
+#system_ids = [2005100805]  # Replace with actual system IDs you're interested in
 # Assuming 'source' column exists and can differentiate between 'nld' and '3dep' data
-elevation_data_df = read_and_parse_elevation_data(filepath, system_ids)
-if elevation_data_df is not None:
-    df_nld = elevation_data_df[elevation_data_df['source'] == 'nld']
-    # df_nld['elevation'] = df_nld['elevation'] * .3048
-    df_3dep = elevation_data_df[elevation_data_df['source'] == 'tep']
+for system_id in system_ids:
+    elevation_data_df = read_and_parse_elevation_data(filepath, [system_id])
+    if elevation_data_df is not None:
+        df_nld = elevation_data_df[elevation_data_df['source'] == 'nld']
+        # df_nld['elevation'] = df_nld['elevation'] * .3048
+        df_3dep = elevation_data_df[elevation_data_df['source'] == 'tep']
+        plot_profiles(df_nld, df_3dep)
 
 # %%

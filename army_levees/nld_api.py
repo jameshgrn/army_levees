@@ -43,6 +43,7 @@ def process_system_ids(system_ids, show_plot=False, n_system_ids=None):
         profile_data, profile_gdf, skip_reason = get_profile_data(system_id)
         if skip_reason == 'contains_zero':
             contains_zero_ids.append(system_id)
+            continue
         elif profile_data:
             profile_gdf['source'] = 'nld'
             profile_gdf['elevation'] = profile_gdf['elevation'] * .3048
@@ -53,6 +54,7 @@ def process_system_ids(system_ids, show_plot=False, n_system_ids=None):
             offset = abs(mean_elevation_3dep - mean_elevation_nld)
             if offset > 10:
                 large_offset_ids.append(system_id)
+                continue
             if show_plot:
                 plot_elevation_data(elevation_data_full, profile_gdf)
             valid_system_ids.append(system_id)
