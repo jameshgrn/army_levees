@@ -5,6 +5,8 @@ artificiallevees.pptx
 .venv/
 .whisper/
 .vscode/
+cache/
+temp/
 
 *.parquet
 .DS_Store
