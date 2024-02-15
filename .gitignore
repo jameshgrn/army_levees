@@ -5,3 +5,5 @@ artificiallevees.pptx
 .venv/
 .whisper/
 .vscode/
+
+*.parquet

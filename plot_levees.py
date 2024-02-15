@@ -8,38 +8,31 @@ from cartopy.io.img_tiles import GoogleTiles
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 from matplotlib_scalebar.scalebar import ScaleBar
 import matplotlib.patheffects as pe
-# #%%
-# elevation_data_full = gpd.read_file('/Users/jakegearon/Downloads/levees-geojson 2/Centerline_elev.geojson')
 
-# # Create a Stamen terrain background instance
-# terrain_background = GoogleTiles(style='street')
+df = gpd.read_parquet('elevation_data.parquet')
 
-# fig, ax = plt.subplots(subplot_kw={'projection': ccrs.PlateCarree()})
+plot_df = df[df['source'] == "tep"].groupby('system_id').first()
+# Create a Stamen terrain background instance
+terrain_background = GoogleTiles(style='satellite')
 
-# # Add the background at a certain zoom level
-# ax.add_image(terrain_background, 8)
+fig, ax = plt.subplots(subplot_kw={'projection': ccrs.PlateCarree()})
 
-# states_provinces = cfeatures.NaturalEarthFeature(
-#     category='cultural',
-#     name='admin_1_states_provinces_lines',
-#     scale='50m',
-#     facecolor='none')
+# Add the background at a certain zoom level
+ax.add_image(terrain_background, 4)
 
-# ax.add_feature(states_provinces, edgecolor='k')
+states_provinces = cfeatures.NaturalEarthFeature(
+    category='cultural',
+    name='admin_1_states_provinces_lines',
+    scale='110m',
+    facecolor='none')
+
 
 # # Normalize the colormap
-# norm = colors.Normalize(vmin=elevation_data_full['elevation'].min(), vmax=elevation_data_full['elevation'].max())
+norm = colors.Normalize(vmin=plot_df['elevation'].min(), vmax=plot_df['elevation'].max())
 
 # # Now plot your data
-# elevation_data_full.plot(ax=ax, column='elevation', cmap='cool', legend=True, alpha=0.5, norm=norm)
-
-# # Set bounds to the Indianapolis greater area
-# #ax.set_extent([-86.33, -85.91, 39.63, 39.93])
-
-# # Add title
-# plt.title('Indiana Levee elevation from USGS 3DEP (m)')
-
-# plt.show()
+plot_df.plot(ax=ax, column='elevation', cmap='cool', legend=True, alpha=0.5, norm=norm)
+ax.add_feature(states_provinces, edgecolor='k', lw=0.5)
 # # %%
 # import seaborn as sns
 # # Plotting the distribution of 'relief'
