@@ -1,4 +1,3 @@
-#%%
 import requests, json, numpy as np, pandas as pd, geopandas as gpd, matplotlib.pyplot as plt, random, py3dep
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -36,7 +35,7 @@ def process_system_ids(system_ids, show_plot=False):
     for system_id in tqdm(system_ids, desc="Processing system IDs"):
         profile_data, profile_gdf, skip_reason = get_profile_data(system_id)
         if skip_reason:
-            print(f"Skipped system ID: {system_id} due to {skip_reason}")
+            #print(f"Skipped system ID: {system_id} due to {skip_reason}")
             if skip_reason == 'contains_zero':
                 contains_zero_ids.append(system_id)
             continue  # Skip further processing for this ID
@@ -46,7 +45,7 @@ def process_system_ids(system_ids, show_plot=False):
             elevation_data_full, profile_gdf, mean_elevation_3dep, mean_elevation_nld, offset = get_elevation_data(profile_gdf)
             if offset > 10:  # Assuming 10 units (e.g., meters) as the threshold for a large offset
                 large_offset_ids.append(system_id)
-                print(f"Large offset for system ID: {system_id}")
+                #print(f"Large offset for system ID: {system_id}")
                 continue
             
             if show_plot:
@@ -68,7 +67,8 @@ def get_profile_data(system_id):
                 return None, None, 'contains_zero'
             return profile_data, profile_gdf, None
     except Exception as e:
-        print(f"Failed to get profile data for system ID: {system_id}: {e}")
+        pass
+        #print(f"Failed to get profile data for system ID: {system_id}: {e}")
     return None, None, None
 
 def get_elevation_data(profile_gdf):
@@ -108,5 +108,3 @@ usace_system_ids = get_usace_system_ids(get_url)
 valid_system_ids, invalid_system_ids = process_system_ids(usace_system_ids, show_plot=False)
 save_system_ids(valid_system_ids, invalid_system_ids)
 
-
-# %%
