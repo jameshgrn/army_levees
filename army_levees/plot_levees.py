@@ -1,4 +1,5 @@
 #%%
+import numpy as np
 import cartopy.feature as cfeatures
 import cartopy.crs as ccrs
 import geopandas as gpd
@@ -51,6 +52,23 @@ for system_id in system_ids:
         df_nld = elevation_data_df[elevation_data_df['source'] == 'nld']
         # df_nld['elevation'] = df_nld['elevation'] * .3048
         df_3dep = elevation_data_df[elevation_data_df['source'] == 'tep']
-        plot_profiles(df_nld, df_3dep)
+        # Thresholding to identify spikes
+        elevation_change_threshold = 100  # Set a threshold for maximum allowed elevation change between consecutive points
+        elevation_diff = df_3dep['elevation'].diff().abs()
+        spikes = elevation_diff > elevation_change_threshold
+        df_3dep.loc[spikes, 'elevation'] = np.nan
+        # set 0 values to nan and then interpolate
+        df_3dep['elevation'].replace(0, np.nan, inplace=True)
+
+        # Interpolation to fill in the gaps
+        df_3dep['elevation'] = df_3dep['elevation'].interpolate()
+
+        # Remove the first and last values of both profiles before plotting
+        df_nld_trimmed = df_nld.iloc[1:-1]
+        df_3dep_trimmed = df_3dep.iloc[1:-1]
+
+        plot_profiles(df_nld_trimmed, df_3dep_trimmed)
+
+
 
 # %%

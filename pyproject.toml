@@ -26,6 +26,8 @@ osmnx = "^1.9.1"
 tqdm = "^4.66.2"
 py3dep = "^0.16.2"
 pyarrow = "^15.0.0"
+earthengine-api = "^0.1.390"
+geemap = "^0.31.0"
 
 
 [tool.poetry.group.dev.dependencies]
