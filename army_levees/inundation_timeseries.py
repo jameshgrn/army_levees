@@ -153,6 +153,9 @@ if __name__ == '__main__':
             # Ensure the value is treated as a single value for the entire column
             gdf[field] = [value] * len(gdf)    
     print(gdf)
+    gdf.to_crs(epsg=CRS, inplace=True)
+    gdf.plot()
+    plt.show()
     # for system_id in usace_system_ids:
     #     get_leveed_area(system_id)
     # if usace_system_ids is not None:
