@@ -134,3 +134,30 @@ def get_leveed_area(system_id):
     except Exception as e:
         print(f"Failed to get profile data for system ID: {system_id}: {e}")
     return None, None, None
+
+if __name__ == '__main__':
+    system_ids = load_usace_system_ids()
+    usace_ids_url = 'https://levees.sec.usace.army.mil:443/api-local/system-categories/usace-nonusace'
+    download_usace_system_ids(usace_ids_url)
+    usace_system_ids = load_usace_system_ids()
+    system_id = usace_system_ids[0]
+    # print(usace_system_ids)
+    url = f'https://levees.sec.usace.army.mil:443/api-local/leveed-areas?system_id={system_id}&embed=geometry&format=geo'
+    response = requests_retry_session().get(url).json()
+    gdf = gpd.GeoDataFrame(response[0]['geometry']['coordinates'][0][0]) 
+    gdf.set_geometry(gpd.points_from_xy(gdf[0], gdf[1]))
+    gdf.rename(columns={0: 'longitude', 1: 'latitude'}, inplace=True)
+    gdf.drop(columns=[2], inplace=True)
+    for field, value in response[0].items():
+        if field != 'geometry':  # Skip the geometry field
+            # Ensure the value is treated as a single value for the entire column
+            gdf[field] = [value] * len(gdf)    
+    print(gdf)
+    # for system_id in usace_system_ids:
+    #     get_leveed_area(system_id)
+    # if usace_system_ids is not None:
+    #     # Proceed with processing the USACE system IDs
+    #     print("USACE system IDs loaded successfully.")
+    # else:
+    #     print("Failed to load USACE system IDs.")
+
