@@ -103,9 +103,13 @@ def process_system_ids(system_ids, show_plot=False, n_system_ids=None, try_syste
     valid_system_ids, invalid_system_ids, contains_zero_ids, large_offset_ids = [], [], [], []
     n_system_ids = n_system_ids or len(system_ids)
     try_system_ids = try_system_ids or system_ids  # Use supplied list or default to all system_ids
+    if not isinstance(try_system_ids, list):
+        try_system_ids = list(try_system_ids)
     random.shuffle(try_system_ids)
     elevation_data_list = []
+    print(try_system_ids[:n_system_ids])
     for system_id in tqdm(try_system_ids[:n_system_ids], desc="Processing system IDs"):
+        print(f"Processing system ID: {system_id}")
         if system_id not in system_ids:
             print(f"System ID {system_id} not in the provided system_ids list.")
             continue
@@ -245,30 +249,89 @@ def save_skipped_ids(skipped_ids, filename):
     with open(filename, 'w') as f:
         f.writelines(f"{id}\n" for id in skipped_ids)
 
+def download_usace_system_ids(url, filepath='usace_system_ids.json'):
+    # Check if the file already exists
+    if not os.path.exists(filepath):
+        try:
+            # Make a request to download the data
+            response = requests.get(url)
+            response.raise_for_status()  # Raise an error for bad responses
+            # Save the data to a file
+            with open(filepath, 'w') as file:
+                json.dump(response.json()['USACE'], file)
+            print(f"Downloaded USACE system IDs to {filepath}.")
+        except requests.RequestException as e:
+            print(f"Request failed: {e}")
+            return None
+    else:
+        print(f"Using existing file for USACE system IDs: {filepath}.")
+
+def load_usace_system_ids(filepath='usace_system_ids.json'):
+    # Load the USACE system IDs from the file
+    try:
+        with open(filepath, 'r') as file:
+            data = json.load(file)
+            # Ensure 'USACE' key exists and contains a list
+            if 'USACE' in data and isinstance(data['USACE'], list):
+                return data['USACE']
+            elif 'USACE' in data and isinstance(data['USACE'], str):
+                # Attempt to parse the string as JSON
+                try:
+                    usace_data = json.loads(data['USACE'])
+                    if isinstance(usace_data, list):
+                        return usace_data
+                    else:
+                        print("Error: 'USACE' key does not contain a list.")
+                        return None
+                except json.JSONDecodeError:
+                    print("Error decoding 'USACE' string as JSON.")
+                    return None
+            else:
+                print("Error: 'USACE' key missing or not a list.")
+                return None
+    except FileNotFoundError:
+        print(f"File not found: {filepath}")
+        return None
+    except json.JSONDecodeError:
+        print(f"Error decoding JSON from {filepath}")
+        return None
+
 if __name__ == "__main__":
     system_id_to_try = [2105000003,
                         2205000002,
                         2205000004,
                         2205000012]
-    usace_system_ids = get_usace_system_ids(get_url)
-    df_list = process_system_ids(usace_system_ids, show_plot=False, n_system_ids=10)
-    df = pd.concat(df_list)
-    df.rename(columns={'.geo': 'geometry'}, inplace=True)
-    df = gpd.GeoDataFrame(df, geometry='geometry', crs=CRS)
-
-    # Assuming system_id is numeric without leading zeros; adjust as necessary
-    if not df.empty and {'x', 'y', 'elevation', 'distance_along_track', 'system_id', 'source'}.issubset(df.columns):
-        df = df.astype({
-            'x': 'float64',
-            'y': 'float64',
-            'elevation': 'float64',
-            'distance_along_track': 'float64',
-            'system_id': 'int64', 
-            'source': 'category',
-        })
+    usace_ids_url = 'https://levees.sec.usace.army.mil:443/api-local/system-categories/usace-nonusace'
+    download_usace_system_ids(usace_ids_url)
+    usace_system_ids = load_usace_system_ids()
+    print(usace_system_ids)
+    if usace_system_ids is not None:
+        # Proceed with processing the USACE system IDs
+        print("USACE system IDs loaded successfully.")
     else:
-        print("DataFrame is empty or missing required columns.")
-    print(df.system_id.unique())
-    df.to_parquet('elevation_data.parquet')
+        print("Failed to load USACE system IDs.")
+    df_list = process_system_ids(usace_system_ids, show_plot=False)
+    if not df_list:
+        print("Warning: df_list is empty. No data frames to concatenate.")
+    else:
+        df = pd.concat(df_list)
+    # Proceed with further processing of df
+    # df.rename(columns={'.geo': 'geometry'}, inplace=True)
+        df = gpd.GeoDataFrame(df, geometry='geometry', crs=CRS)
+
+        # Assuming system_id is numeric without leading zeros; adjust as necessary
+        if not df.empty and {'x', 'y', 'elevation', 'distance_along_track', 'system_id', 'source'}.issubset(df.columns):
+            df = df.astype({
+                'x': 'float64',
+                'y': 'float64',
+                'elevation': 'float64',
+                'distance_along_track': 'float64',
+                'system_id': 'int64', 
+                'source': 'category',
+            })
+        else:
+            print("DataFrame is empty or missing required columns.")
+        print(df.system_id.unique())
+        df.to_parquet('elevation_data.parquet')
 
 # %%
