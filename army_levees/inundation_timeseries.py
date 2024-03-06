@@ -114,3 +114,23 @@ def load_usace_system_ids(filepath='usace_system_ids.json'):
     except json.JSONDecodeError:
         print(f"Error decoding JSON from {filepath}")
         return None
+    
+def get_leveed_area(system_id):
+    try:
+        url = f'https://levees.sec.usace.army.mil:443/api-local/leveed-areas?system_id={system_id}&embed=geometry&format=geo'
+        response = requests_retry_session().get(url)
+        print(response)
+        # if response.status_code == 200:
+        #     profile_data = response.json()
+        #     if profile_data is None or not profile_data:  # Check if profile_data is None or empty
+        #         return None, None, 'empty'
+        #     profile_gdf = json_to_geodataframe(profile_data).to_crs(CRS)
+        #     if profile_gdf.empty:
+        #         return None, None, 'empty'
+        #     if (profile_gdf['elevation'].astype(float) == 0).any():
+        #         return None, None, 'contains_zero'
+        #     profile_gdf['system_id'] = system_id  # Add system_id as a column
+        #     return profile_data, profile_gdf, None
+    except Exception as e:
+        print(f"Failed to get profile data for system ID: {system_id}: {e}")
+    return None, None, None
