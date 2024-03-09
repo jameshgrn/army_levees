@@ -10,6 +10,8 @@ from urllib3.util.retry import Retry
 from shapely.geometry import LineString, MultiLineString
 from utils import json_to_geodataframe, plot_profiles
 from tqdm import tqdm
+from shapely.geometry import Polygon
+import eemont
 import py3dep
 from requests.exceptions import RetryError
 import time
@@ -144,18 +146,95 @@ if __name__ == '__main__':
     # print(usace_system_ids)
     url = f'https://levees.sec.usace.army.mil:443/api-local/leveed-areas?system_id={system_id}&embed=geometry&format=geo'
     response = requests_retry_session().get(url).json()
-    gdf = gpd.GeoDataFrame(response[0]['geometry']['coordinates'][0][0]) 
-    gdf.set_geometry(gpd.points_from_xy(gdf[0], gdf[1]))
-    gdf.rename(columns={0: 'longitude', 1: 'latitude'}, inplace=True)
-    gdf.drop(columns=[2], inplace=True)
-    for field, value in response[0].items():
-        if field != 'geometry':  # Skip the geometry field
-            # Ensure the value is treated as a single value for the entire column
-            gdf[field] = [value] * len(gdf)    
-    print(gdf)
-    gdf.to_crs(epsg=CRS, inplace=True)
-    gdf.plot()
+    # Assuming 'response' is your JSON response and contains geometry data
+    coords = response[0]['geometry']['coordinates'][0][0]  # Assuming the first set of coordinates represents the polygon
+
+    # # Create a Polygon geometry from the coordinates
+    # polygon = Polygon(coords)
+
+    # # Create the GeoDataFrame with this single Polygon geometry
+    # gdf = gpd.GeoDataFrame(crs=CRS, geometry=[polygon])
+
+    # # Now you can proceed to add other fields as before
+    # for field, value in response[0].items():
+    #     if field != 'geometry':  # Skip the geometry field
+    #         # Ensure the value is treated as a single value for the entire column
+    #         gdf[field] = [value] * len(gdf)
+
+    # print(gdf)
+    # gdf.to_crs(crs=CRS, inplace=True)
+    # # Convert the 'stewardOrgIds' column's lists to strings
+    # gdf['stewardOrgIds'] = gdf['stewardOrgIds'].apply(lambda x: ', '.join(map(str, x)) if isinstance(x, list) else x)
+    # # Convert GeoDataFrame to a GeoJSON string
+    # geojson_str = gdf.to_json()
+
+    # Convert GeoJSON to an Earth Engine Geometry
+    # Remove the third element (elevation) from each coordinate pair
+    coords_2d = [[lon, lat] for lon, lat, _ in coords]
+
+    # Use the adjusted coordinates for the Earth Engine Polygon
+    ee_geometry = ee.Geometry.Polygon([coords_2d])
+    landsat8Sr = ee.ImageCollection('LANDSAT/LC08/C02/T1_L2')
+
+
+    def mask_l8sr(image):
+        # Bit 0 - Fill
+        # Bit 1 - Dilated Cloud
+        # Bit 2 - Cirrus
+        # Bit 3 - Cloud
+        # Bit 4 - Cloud Shadow
+        qa_mask = image.select('QA_PIXEL').bitwiseAnd(int('11111', 2)).eq(0)
+        saturation_mask = image.select('QA_RADSAT').eq(0)
+
+        # Apply the scaling factors to the appropriate bands.
+        optical_bands = image.select('SR_B.').multiply(0.0000275).add(-0.2)
+        thermal_bands = image.select('ST_B.*').multiply(0.00341802).add(149.0)
+
+        # Replace the original bands with the scaled ones and apply the masks.
+        return image.addBands(optical_bands, None, True) \
+                    .addBands(thermal_bands, None, True) \
+                    .updateMask(qa_mask) \
+                    .updateMask(saturation_mask)
+    def add_variables(image):
+    # Compute time in fractional years since the epoch.
+        date = image.date()
+        years = date.difference(ee.Date('1970-01-01'), 'year')
+        # Return the image with the added bands.
+        return image \
+            .addBands(image.normalizedDifference(['SR_B5', 'SR_B4']).rename('NDVI')) \
+            .addBands(ee.Image(years).rename('t').float()) \
+            .addBands(ee.Image.constant(1))
+
+    # Assuming landsat8Sr is your Landsat 8 Surface Reflectance ImageCollection,
+    # roi is your region of interest as an ee.Geometry,
+    # and mask_l8sr is the cloud masking function defined previously.
+    roi = ee_geometry
+    # Filter the Landsat 8 ImageCollection to the area of interest and date range,
+    # apply cloud masking, and then add the NDVI, time, and constant bands.
+    filtered_landsat = landsat8Sr \
+        .filterBounds(roi) \
+        .filterDate('2013-01-01', '2022-12-31') \
+        .map(mask_l8sr) \
+        .map(add_variables)
+    
+    ts = filtered_landsat.getTimeSeriesByRegion(reducer = [ee.Reducer.median()],
+                             geometry = roi,
+                             bands = ['NDVI'],
+                             scale = 30)
+    ts_df = geemap.ee_to_df(ts, columns = ['date', 'NDVI'])
+    
+    ts_df['date'] = pd.to_datetime(ts_df['date'])
+    ts_df = ts_df.sort_values('date')
+    #replace values below -1 with NaN
+    ts_df['NDVI'] = ts_df['NDVI'].apply(lambda x: x if x > -1 else np.nan)
+    ts_df_clean = ts_df.dropna()
+    #plot timesries
+    fig, ax = plt.subplots()
+    ts_df_clean['NDVI'] = ts_df_clean['NDVI'].astype(float)
+    ts_df_clean.plot(x='date', y='NDVI', ax=ax)
     plt.show()
+
+
     # for system_id in usace_system_ids:
     #     get_leveed_area(system_id)
     # if usace_system_ids is not None:

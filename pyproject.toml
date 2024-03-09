@@ -28,6 +28,9 @@ py3dep = "^0.16.2"
 pyarrow = "^15.0.0"
 earthengine-api = "^0.1.390"
 geemap = "^0.31.0"
+segment-geospatial = "^0.10.2"
+pycrs = "^1.0.2"
+eemont = "^0.3.6"
 
 
 [tool.poetry.group.dev.dependencies]
