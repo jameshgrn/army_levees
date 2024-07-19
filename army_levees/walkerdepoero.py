@@ -1,3 +1,4 @@
+#%%
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -137,12 +138,12 @@ def visualize_paths(paths, final_elevations, initial_elevations):
 
 if __name__ == '__main__':
     # Parameters
-    num_walkers = 200
+    num_walkers = 2000
     steps = 100
     size = 150
     height = 150
     # Update to only include the four parameters of the simplified model
-    phi, psi, epsilon, delta = 1, 2, .1, 0.1
+    phi, psi, epsilon, delta = 1, .2, .1, 0.1
     no_data_value = -9999
     noise_level = 5
 
@@ -163,3 +164,47 @@ if __name__ == '__main__':
 
     # Visualize the paths and elevation changes
     visualize_paths(paths, final_elevations, initial_elevations)
+    
+    
+#%%
+import numpy as np
+
+def simulate_walker(size, height, phi, psi, epsilon, delta, no_data_value, noise_level, initial_lambda, lambda_threshold=2, initial_elevations=None):
+    if initial_elevations is None:
+        initial_elevations = create_noisy_gaussian_bump(size, height, noise_level)
+    elevations = np.copy(initial_elevations)
+    x, y = initialize_walker_position(elevations)
+    V_last = [0, 1]  # Initial direction vector
+    path = [(x, y)]
+    last_position = None  # Initialize last_position to prevent immediate backtracking
+    lambda_value = initial_lambda
+
+    while lambda_value < lambda_threshold:
+        neighbors = get_neighbors(x, y, size, last_position)  # Exclude the last position
+        # Remove lambda_value from the arguments
+        probabilities = compute_transition_probabilities(x, y, neighbors, elevations, V_last, phi, psi, epsilon, delta, no_data_value)
+        
+        next_position = max(probabilities, key=probabilities.get)  # Choose next step based on highest probability
+        V_last = [next_position[0] - x, next_position[1] - y]  # Update direction vector
+        
+        # Update position based on direction vector
+        x, y = x + V_last[0], y + V_last[1]
+        path.append((int(x), int(y)))  # Append new position to path
+        
+        # Ensure the walker stays within bounds
+        x, y = max(0, min(size - 1, int(x))), max(0, min(size - 1, int(y)))
+
+        # Update lambda based on some growth function or external influence
+        lambda_value += 0.01  # Example increment, adjust based on your model dynamics
+
+    return path, elevations
+
+# Parameters
+initial_lambda = 0.1  # Starting value of lambda
+
+# Simulation call
+path, elevations = simulate_walker(
+    size=150, height=150, phi=1, psi=2, epsilon=0.1, delta=0.1,
+    no_data_value=-9999, noise_level=5, initial_lambda=initial_lambda
+)
+# %%

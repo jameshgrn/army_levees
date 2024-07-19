@@ -31,6 +31,9 @@ geemap = "^0.31.0"
 segment-geospatial = "^0.10.2"
 pycrs = "^1.0.2"
 eemont = "^0.3.6"
+statsmodels = "^0.14.1"
+requests = "^2.31.0"
+utm = "^0.7.0"
 
 
 [tool.poetry.group.dev.dependencies]

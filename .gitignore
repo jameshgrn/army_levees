@@ -7,6 +7,12 @@ artificiallevees.pptx
 .vscode/
 cache/
 temp/
+data/
+*.pptx
+*.png
+*.gif
+.DS_Store
+
 
 *.parquet
 .DS_Store

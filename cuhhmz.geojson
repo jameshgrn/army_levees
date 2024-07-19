@@ -1,7 +1,0 @@
-{
-"type": "FeatureCollection",
-"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
-"features": [
-{ "type": "Feature", "properties": { "evacuationPlanIndicator": false, "buildings": 43, "systemName": "Howard Levee System", "id": 1306000056, "warningIndicator": false, "lastEditedDate": "2024-03-05T00:36:37.000Z", "lastEditedUserId": 1, "people": 113, "name": "Howard Levee System", "propertyValue": 13239311.743799999, "areaSquareMiles": 0.07452215485912779, "floodSources": "Foster Joseph Sayers Lake", "systemId": 1305000004, "crops": "Corn: 2.67; Other Hay/Non Alfalfa: 1.78; Alfalfa: .89; Soybeans: .44", "stewardOrgIds": "0, 57, 57", "leveedAreaSourceId": 6, "rpStatus": "NA", "femaAccreditationRating": "Accredited Levee System" }, "geometry": { "type": "Polygon", "coordinates": [ [ [ -77.653431549999894, 41.0179352500001, 0.0 ], [ -77.661430149999902, 41.01532425, 0.0 ], [ -77.663304449999899, 41.01198665, 0.0 ], [ -77.66361965, 41.01414005, 0.0 ], [ -77.655458349999904, 41.019447550000102, 0.0 ], [ -77.653431549999894, 41.0179352500001, 0.0 ] ] ] } }
-]
-}
