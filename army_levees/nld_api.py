@@ -192,7 +192,6 @@ def get_elevation_data(profile_gdf, system_id, epsg_code):
         with rasterio.open(vrt_path) as src:
             elevations = [next(src.sample([(x, y)]))[0] for x, y in coords_list]  # Correctly extract elevation values from the VRT file with 4269 crs
         # Clean up: remove the VRT file to free up memory
- 
         os.remove(vrt_path)
         # os.remove("/Users/jakegearon/CursorProjects/army_levees/cache") #remove the cache folder
         # Prepare the elevation data as a GeoDataFrame
@@ -293,27 +292,39 @@ def save_elevation_data(elevation_data, system_id, epsg_code, source, directory=
     if not os.path.exists(directory):
         os.makedirs(directory)
     
-    filename = os.path.join(directory, f"elevation_data_{system_id}_{source}_epsg{epsg_code}.parquet") #change if you want
-    elevation_data.to_parquet(filename) #change this
+    filename = os.path.join(directory, f"elevation_data_{system_id}_{source}_epsg{epsg_code}.parquet")
+    elevation_data.to_parquet(filename)
     print(f"Saved elevation data for system ID {system_id} ({source}) to {filename}")
 
 if __name__ == "__main__":
     usace_ids_url = 'https://levees.sec.usace.army.mil:443/api-local/system-categories/usace-nonusace'
     download_usace_system_ids(usace_ids_url)
-    #either load all the system ids
     usace_system_ids = load_usace_system_ids()
-    # or just load a single levee
-    #usace_system_ids = ['13050000']
     
     target_sample_count = 250
     successful_samples = 0
     max_attempts = 1000  # Limit the number of attempts to avoid infinite loops
     attempts = 0
 
+    valid_ids = set()
+    invalid_ids = set()
+    
+    # Load previously processed IDs if files exist
+    try:
+        with open('valid_system_ids.txt', 'r') as f:
+            valid_ids = set(f.read().splitlines())
+        with open('invalid_system_ids.txt', 'r') as f:
+            invalid_ids = set(f.read().splitlines())
+    except FileNotFoundError:
+        pass
+
     with tqdm(total=target_sample_count, desc="Processing system IDs") as pbar:
         while successful_samples < target_sample_count and attempts < max_attempts:
             random_system_ids = np.random.choice(usace_system_ids, target_sample_count - successful_samples)
             for system_id in random_system_ids:
+                if system_id in valid_ids or system_id in invalid_ids:
+                    continue  # Skip already processed IDs
+                
                 attempts += 1
                 if system_id not in usace_system_ids:
                     tqdm.write(f"System ID {system_id} not in the provided system_ids list.")
@@ -354,8 +365,16 @@ if __name__ == "__main__":
                         
                     except Exception as e:
                         tqdm.write(f"Error processing system ID {system_id}: {str(e)}")
-                if successful_samples >= target_sample_count:
-                    break
+                    valid_ids.add(system_id)
+                else:
+                    invalid_ids.add(system_id)
+
+                # Periodically save processed IDs
+                if attempts % 100 == 0:
+                    save_system_ids(valid_ids, invalid_ids)
+
+    # Save final set of processed IDs
+    save_system_ids(valid_ids, invalid_ids)
 
     if successful_samples < target_sample_count:
         tqdm.write(f"Only {successful_samples} samples were successfully processed out of the requested {target_sample_count}.")

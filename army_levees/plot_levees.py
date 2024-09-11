@@ -180,32 +180,7 @@ plt.xlabel('Log of Mean Elevation Difference (m)')
 # %%
 
 # %%
-def plot_profiles(profile_gdf, elevation_data_full):
-    from sklearn.metrics import mean_absolute_error, mean_squared_error
-    from math import sqrt
-    import matplotlib.pyplot as plt
 
-    # Assuming 'distance_along_track' is a common column
-    merged_df = pd.merge(profile_gdf, elevation_data_full, on='distance_along_track', suffixes=('_nld', '_3dep'))
-
-    # Calculate MAE and RMSE
-    mae = mean_absolute_error(merged_df['elevation_nld'], merged_df['elevation_3dep'])
-    rmse = sqrt(mean_squared_error(merged_df['elevation_nld'], merged_df['elevation_3dep']))
-    print(f"Mean Absolute Error (MAE): {mae}")
-    print(f"Root Mean Squared Error (RMSE): {rmse}")
-
-    # Plotting
-    plt.figure(figsize=(10, 6))
-    plt.plot(merged_df['distance_along_track'], merged_df['elevation_nld'], label='NLD Profile', color='blue', marker='o', linestyle='-')
-    plt.plot(merged_df['distance_along_track'], merged_df['elevation_3dep'], label='3DEP Profile', color='red', marker='x', linestyle='--')
-    plt.title(f'Elevation Profiles Comparison')
-    plt.xlabel('Distance Along Track (m)')
-    plt.ylabel('Elevation (m)')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-
-plot_profiles(df_nld, df_3dep)
 # %%
 import numpy as np
 import cartopy.feature as cfeatures
