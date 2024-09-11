@@ -21,6 +21,7 @@ import utm
 ee.Authenticate()
 ee.Initialize()
 
+
 CRS = "EPSG:4269"
 get_url = 'https://levees.sec.usace.army.mil:443/api-local/system-categories/usace-nonusace'
 
@@ -139,7 +140,10 @@ def get_profile_data(system_id):
             if profile_data is None or not profile_data:  # Check if profile_data is None or empty
                 return None, None, 'empty'
             profile_gdf = json_to_geodataframe(profile_data) #gets transformed into 3857 in this function
-            profile_gdf_utm_finding =  profile_gdf.to_crs('EPSG:4326')
+            if profile_gdf.empty or profile_gdf.geometry.is_empty.any():
+                print(f"Profile data for system ID {system_id} is empty or has invalid geometries.")
+                return None, None, 'invalid_geometry'
+            profile_gdf_utm_finding = profile_gdf.to_crs('EPSG:4326')
             SFlong = profile_gdf_utm_finding.geometry.x[0]
             SFlat = profile_gdf_utm_finding.geometry.y[0]
             zone_number = long2utm(SFlong)
