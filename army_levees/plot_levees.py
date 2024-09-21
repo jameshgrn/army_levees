@@ -9,7 +9,6 @@ from cartopy.io.img_tiles import GoogleTiles
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 from matplotlib_scalebar.scalebar import ScaleBar
 from matplotlib.colors import Normalize
-
 import matplotlib.patheffects as pe
 from utils import read_and_parse_elevation_data, plot_profiles
 filepath = '/Users/jakegearon/projects/army_levees/elevation_data_100sample.parquet'
