@@ -13,58 +13,63 @@ This package helps collect and analyze elevation data for USACE levee systems by
 
 ```mermaid
 graph TD
-    %% Data Sources
-    A[NLD API] -->|Raw Profile Data| B[sample_levees.py]
-    D[3DEP API] -->|Elevation Data| B
+    %% Data Sources & API Handling
+    A[NLD API] -->|Async Fetch| B[nld_api.py]
+    D[3DEP API] -->|Batch Sample| E[sampling.py]
     
-    %% Core Processing
+    %% Core Processing Pipeline
     subgraph Core Processing [army_levees/core]
-        B -->|Process Samples| E[sampling.py]
-        E -->|Get Elevations| F[elevation.py]
-        F --> G[plot_modular.py]
-        H[nld_api.py] -->|Fetch Data| B
+        B -->|Profile Data| F[sample_levees.py]
+        E -->|Elevation Data| F
+        F -->|Process| G[sampling.py]
+        H[get_random_samples.py] -->|Trigger| F
     end
     
-    %% Data Storage
+    %% Data Storage & Processing
     G -->|Save| I[(data/processed/*.parquet)]
     
-    %% Data Structure
-    subgraph Parquet Schema
-        I --> |Contains| J[system_id]
-        I --> |Contains| K[elevation]
-        I --> |Contains| L[dep_elevation]
-        I --> |Contains| M[difference]
-        I --> |Contains| N[distance_along_track]
-        I --> |Contains| O[geometry]
+    %% Analysis & Visualization
+    subgraph Analysis & Visualization
+        I -->|Load| J[plot_modular.py]
+        I -->|Analyze| K[analyze_levees.py]
+        J --> L[Plot Outputs]
+        K --> M[Analysis Results]
     end
     
-    %% Analysis & Visualization
-    I --> P[analyze_levees.py]
-    P --> Q[Visualization Outputs]
-    Q --> R[plots/*.pdf]
+    %% Data Schema
+    subgraph Parquet Schema
+        I --> |Contains| N[system_id]
+        I --> |Contains| O[elevation]
+        I --> |Contains| P[dep_elevation]
+        I --> |Contains| Q[difference]
+        I --> |Contains| R[distance_along_track]
+        I --> |Contains| S[geometry]
+    end
     
-    %% Entry Points
-    S[get_random_samples.py] -->|Trigger| B
-    
-    %% Coordinate Systems
-    subgraph CRS Handling
-        T[EPSG:3857] -->|transform| U[EPSG:4326]
-        U -->|used by| V[3DEP Sampling]
-        U -->|stored in| I
+    %% Module Organization
+    subgraph Project Structure
+        T[army_levees]
+        T --> U[core/]
+        T --> V[examples/]
+        U --> W[nld_api.py]
+        U --> X[sample_levees.py]
+        U --> Y[sampling.py]
+        U --> Z[plot_modular.py]
+        V --> AA[analyze_levees.py]
     end
     
     %% Style
     classDef api fill:#f9f,stroke:#333,stroke-width:2px
-    classDef data fill:#bbf,stroke:#333,stroke-width:2px
-    classDef process fill:#bfb,stroke:#333,stroke-width:2px
-    classDef crs fill:#ffd,stroke:#333,stroke-width:2px
-    classDef output fill:#fbb,stroke:#333,stroke-width:2px
+    classDef core fill:#bfb,stroke:#333,stroke-width:2px
+    classDef storage fill:#bbf,stroke:#333,stroke-width:2px
+    classDef analysis fill:#fbb,stroke:#333,stroke-width:2px
+    classDef structure fill:#ddd,stroke:#333,stroke-width:1px
     
     class A,D api
-    class I data
-    class B,E,F,G process
-    class T,U,V crs
-    class R output
+    class B,E,F,G,H core
+    class I storage
+    class J,K,L,M analysis
+    class T,U,V,W,X,Y,Z,AA structure
 ```
 
 ## Quick Start
