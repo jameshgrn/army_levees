@@ -15,46 +15,36 @@ This package helps collect and analyze elevation data for USACE levee systems by
 graph TD
     %% Data Sources & API Handling
     A[NLD API] -->|Async Fetch| B[sample_levees.py]
-    D[3DEP API] -->|Batch Sample| E[sampling.py]
+    D[3DEP API] -->|Elevation Data| B
 
     %% Core Processing Pipeline
     subgraph Core Processing [army_levees/core]
-        B -->|Profile Data| F[sample_levees.py]
-        E -->|Elevation Data| F
-        F -->|Process| G[sampling.py]
+        B -->|Process & Save| I[(data/processed/*.parquet)]
     end
-
-    %% Data Storage & Processing
-    G -->|Save| I[(data/processed/*.parquet)]
 
     %% Analysis & Visualization
     subgraph Analysis & Visualization
         I -->|Load| J[visualize_levee.py]
-        I -->|Analyze| K[analyze_levees.py]
-        J --> L[Individual Plots]
-        J --> M[Summary Plots]
-        K --> N[Analysis Results]
+        J --> K[Individual Plots]
+        J --> L[Summary Plots]
     end
 
     %% Data Schema
     subgraph Parquet Schema
-        I --> |Contains| O[system_id]
-        I --> |Contains| P[elevation]
-        I --> |Contains| Q[dep_elevation]
-        I --> |Contains| R[difference]
-        I --> |Contains| S[distance_along_track]
-        I --> |Contains| T[geometry]
+        I --> |Contains| M[system_id]
+        I --> |Contains| N[elevation]
+        I --> |Contains| O[dep_elevation]
+        I --> |Contains| P[difference]
+        I --> |Contains| Q[distance_along_track]
+        I --> |Contains| R[geometry]
     end
 
     %% Module Organization
     subgraph Project Structure
-        U[army_levees]
-        U --> V[core/]
-        U --> W[examples/]
-        V --> X[sample_levees.py]
-        V --> Y[sampling.py]
-        V --> Z[visualize_levee.py]
-        W --> AA[analyze_levees.py]
+        S[army_levees]
+        S --> T[core/]
+        T --> U[sample_levees.py]
+        T --> V[visualize_levee.py]
     end
 
     %% Style
@@ -65,10 +55,10 @@ graph TD
     classDef structure fill:#ddd,stroke:#333,stroke-width:1px
 
     class A,D api
-    class B,E,F,G core
+    class B core
     class I storage
-    class J,K,L,M,N analysis
-    class U,V,W,X,Y,Z,AA structure
+    class J,K,L analysis
+    class S,T,U,V structure
 ```
 
 ## Quick Start
