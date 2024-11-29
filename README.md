@@ -29,34 +29,32 @@ graph TD
 
     %% Analysis & Visualization
     subgraph Analysis & Visualization
-        I -->|Load| J[plot_modular.py]
-        I -->|Load| K[visualize_levee.py]
-        I -->|Analyze| L[analyze_levees.py]
-        J --> M[Plot Outputs]
-        K --> N[Visualization Results]
-        L --> O[Analysis Results]
+        I -->|Load| J[visualize_levee.py]
+        I -->|Analyze| K[analyze_levees.py]
+        J --> L[Individual Plots]
+        J --> M[Summary Plots]
+        K --> N[Analysis Results]
     end
 
     %% Data Schema
     subgraph Parquet Schema
-        I --> |Contains| P[system_id]
-        I --> |Contains| Q[elevation]
-        I --> |Contains| R[dep_elevation]
-        I --> |Contains| S[difference]
-        I --> |Contains| T[distance_along_track]
-        I --> |Contains| U[geometry]
+        I --> |Contains| O[system_id]
+        I --> |Contains| P[elevation]
+        I --> |Contains| Q[dep_elevation]
+        I --> |Contains| R[difference]
+        I --> |Contains| S[distance_along_track]
+        I --> |Contains| T[geometry]
     end
 
     %% Module Organization
     subgraph Project Structure
-        V[army_levees]
-        V --> W[core/]
-        V --> X[examples/]
-        W --> Y[sample_levees.py]
-        W --> Z[sampling.py]
-        W --> AA[plot_modular.py]
-        W --> BB[visualize_levee.py]
-        X --> CC[analyze_levees.py]
+        U[army_levees]
+        U --> V[core/]
+        U --> W[examples/]
+        V --> X[sample_levees.py]
+        V --> Y[sampling.py]
+        V --> Z[visualize_levee.py]
+        W --> AA[analyze_levees.py]
     end
 
     %% Style
@@ -69,8 +67,8 @@ graph TD
     class A,D api
     class B,E,F,G core
     class I storage
-    class J,K,L,M,N,O analysis
-    class V,W,X,Y,Z,AA,BB,CC structure
+    class J,K,L,M,N analysis
+    class U,V,W,X,Y,Z,AA structure
 ```
 
 ## Quick Start
