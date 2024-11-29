@@ -12,49 +12,52 @@ This package helps collect and analyze elevation data for USACE levee systems by
 ## System Architecture
 
 ```mermaid
-flowchart TD
-    %% APIs
-    NLD[National Levee Database API] -->|Async HTTP Requests| sample[sample_levees.py]
-    DEP[USGS 3DEP Elevation API] -->|Elevation Queries| sample
-
-    %% Error Handling
-    subgraph error[Error Handling]
-        retry[Retry Logic] --> timeouts[HTTP Timeouts]
-        timeouts --> invalid[Invalid Data Filtering]
-        invalid --> missing[Missing Value Handling]
+graph TD
+    subgraph Data Collection
+        A[USACE System IDs] -->|get_usace_system_ids| B[Random Sample Selection]
+        B -->|get_random_levees_async| C[Async Processing]
+        C -->|get_nld_profile_async| D[NLD Profile Data]
+        C -->|get_3dep_elevations_async| E[3DEP Elevation Data]
     end
 
-    %% Sample Levees Processing
-    subgraph sample_processing[sample_levees.py]
-        get_ids[get_usace_system_ids] -->|Returns List| get_profile[get_nld_profile_async]
-        get_profile -->|Returns Coords| get_elev[get_3dep_elevations_async]
-        get_elev -->|Returns Elevs| process[process_system_async]
-        process -->|Creates| gdf[GeoDataFrame]
+    subgraph Data Processing
+        D --> F[Create GeoDataFrame]
+        E --> F
+        F -->|filter_valid_segments| G[Valid Segments]
+        G -->|calculate| H[Elevation Differences]
     end
 
-    %% Data Processing Steps
-    subgraph processing[Data Processing Steps]
-        direction LR
-        step1[Get NLD Profile] --> step2[Convert Coordinates]
-        step2 --> step3[Filter Invalid Data]
-        step3 --> step4[Calculate Differences]
-        step4 --> step5[Save to Parquet]
+    subgraph Visualization
+        H --> I[Single System Plots]
+        H --> J[Summary Statistics]
+
+        subgraph Single System Visualization
+            I --> K[Elevation Profile Plot]
+            I --> L[Difference Histogram]
+        end
+
+        subgraph Summary Visualization
+            J --> M[Length Distribution]
+            J --> N[Mean Diff vs Length]
+            J --> O[CDF of Differences]
+        end
     end
 
-    %% Data Storage
-    gdf -->|Save| parquet[(Parquet Files<br/>data/processed/*.parquet)]
+    subgraph Data Storage
+        F -->|save_parquet| P[(Processed Data)]
+        P -->|load_parquet| I
+        P -->|load_parquet| J
+    end
 
-    %% Styling
-    classDef api fill:#f9f,stroke:#333,stroke-width:2px
-    classDef process fill:#bfb,stroke:#333,stroke-width:2px
-    classDef storage fill:#bbf,stroke:#333,stroke-width:2px
-    classDef error fill:#ffb,stroke:#333,stroke-width:2px
+    classDef processing fill:#f9f,stroke:#333,stroke-width:2px
+    classDef visualization fill:#bbf,stroke:#333,stroke-width:2px
+    classDef storage fill:#bfb,stroke:#333,stroke-width:2px
+    classDef collection fill:#ffb,stroke:#333,stroke-width:2px
 
-    class NLD,DEP api
-    class sample_processing,process,get_ids,get_profile,get_elev process
-    class parquet storage
-    class step1,step2,step3,step4,step5 process
-    class error,retry,timeouts,invalid,missing error
+    class A,B,C,D,E collection
+    class F,G,H processing
+    class I,J,K,L,M,N,O visualization
+    class P storage
 ```
 
 ## Quick Start
