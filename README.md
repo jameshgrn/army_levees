@@ -27,10 +27,10 @@ flowchart TD
     %% Data Processing Steps
     subgraph processing[Data Processing Steps]
         direction LR
-        step1[1. Fetch Raw Data] --> step2[2. Convert Units feet → meters]
-        step2 --> step3[3. Filter Invalid Points]
-        step3 --> step4[4. Calculate Differences]
-        step4 --> step5[5. Save to Parquet]
+        get_nld[Get NLD Profile] --> convert[Convert Coordinates]
+        convert --> filter[Filter Invalid Data]
+        filter --> calc[Calculate Differences]
+        calc --> save[Save to Parquet]
     end
 
     %% Sample Levees Processing
@@ -203,7 +203,7 @@ army_levees/
 ├── army_levees/          # Main package
 │   └── core/            # Core functionality
 │       ├── nld_api.py   # NLD API interface
-│       ├��─ sample_levees.py  # Sampling functions
+│       ├ sample_levees.py  # Sampling functions
 │       └── visualize_levee.py  # Visualization
 ├── data/
 │   └── processed/       # Processed parquet files
