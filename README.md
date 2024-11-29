@@ -27,6 +27,16 @@ graph TD
         G -->|calculate| H[Elevation Differences]
     end
 
+    subgraph Filtering Conditions
+        V1[NLD elevation > 1.0m] --> V[Valid Data]
+        V2[3DEP elevation > 1.0m] --> V
+        V3[No missing NLD data] --> V
+        V4[No missing 3DEP data] --> V
+        V5[No floodwalls] --> V
+        V6[Gap < 100m] --> V
+        V -->|influences| G
+    end
+
     subgraph Visualization
         H --> I[Single System Plots]
         H --> J[Summary Statistics]
@@ -53,11 +63,13 @@ graph TD
     classDef visualization fill:#bbf,stroke:#333,stroke-width:2px
     classDef storage fill:#bfb,stroke:#333,stroke-width:2px
     classDef collection fill:#ffb,stroke:#333,stroke-width:2px
+    classDef filtering fill:#ffd,stroke:#333,stroke-width:2px
 
     class A,B,C,D,E collection
     class F,G,H processing
     class I,J,K,L,M,N,O visualization
     class P storage
+    class V1,V2,V3,V4,V5,V6,V filtering
 ```
 
 ## Quick Start
@@ -181,7 +193,7 @@ army_levees/
 ├── army_levees/          # Main package
 │   └── core/            # Core functionality
 │       ├── nld_api.py   # NLD API interface
-│       ├ sample_levees.py  # Sampling functions
+│       ├── sample_levees.py  # Sampling functions
 │       └── visualize_levee.py  # Visualization
 ├── data/
 │   └── processed/       # Processed parquet files
@@ -203,7 +215,6 @@ Each parquet file contains:
 - `difference`: NLD - 3DEP (meters)
 - `distance_along_track`: Distance along levee (meters)
 - `geometry`: Point geometry (EPSG:4326)
-
 
 ## Contributing
 
