@@ -14,62 +14,63 @@ This package helps collect and analyze elevation data for USACE levee systems by
 ```mermaid
 graph TD
     %% Data Sources & API Handling
-    A[NLD API] -->|Async Fetch| B[nld_api.py]
+    A[NLD API] -->|Async Fetch| B[sample_levees.py]
     D[3DEP API] -->|Batch Sample| E[sampling.py]
-    
+
     %% Core Processing Pipeline
     subgraph Core Processing [army_levees/core]
         B -->|Profile Data| F[sample_levees.py]
         E -->|Elevation Data| F
         F -->|Process| G[sampling.py]
-        H[get_random_samples.py] -->|Trigger| F
     end
-    
+
     %% Data Storage & Processing
     G -->|Save| I[(data/processed/*.parquet)]
-    
+
     %% Analysis & Visualization
     subgraph Analysis & Visualization
         I -->|Load| J[plot_modular.py]
-        I -->|Analyze| K[analyze_levees.py]
-        J --> L[Plot Outputs]
-        K --> M[Analysis Results]
+        I -->|Load| K[visualize_levee.py]
+        I -->|Analyze| L[analyze_levees.py]
+        J --> M[Plot Outputs]
+        K --> N[Visualization Results]
+        L --> O[Analysis Results]
     end
-    
+
     %% Data Schema
     subgraph Parquet Schema
-        I --> |Contains| N[system_id]
-        I --> |Contains| O[elevation]
-        I --> |Contains| P[dep_elevation]
-        I --> |Contains| Q[difference]
-        I --> |Contains| R[distance_along_track]
-        I --> |Contains| S[geometry]
+        I --> |Contains| P[system_id]
+        I --> |Contains| Q[elevation]
+        I --> |Contains| R[dep_elevation]
+        I --> |Contains| S[difference]
+        I --> |Contains| T[distance_along_track]
+        I --> |Contains| U[geometry]
     end
-    
+
     %% Module Organization
     subgraph Project Structure
-        T[army_levees]
-        T --> U[core/]
-        T --> V[examples/]
-        U --> W[nld_api.py]
-        U --> X[sample_levees.py]
-        U --> Y[sampling.py]
-        U --> Z[plot_modular.py]
-        V --> AA[analyze_levees.py]
+        V[army_levees]
+        V --> W[core/]
+        V --> X[examples/]
+        W --> Y[sample_levees.py]
+        W --> Z[sampling.py]
+        W --> AA[plot_modular.py]
+        W --> BB[visualize_levee.py]
+        X --> CC[analyze_levees.py]
     end
-    
+
     %% Style
     classDef api fill:#f9f,stroke:#333,stroke-width:2px
     classDef core fill:#bfb,stroke:#333,stroke-width:2px
     classDef storage fill:#bbf,stroke:#333,stroke-width:2px
     classDef analysis fill:#fbb,stroke:#333,stroke-width:2px
     classDef structure fill:#ddd,stroke:#333,stroke-width:1px
-    
+
     class A,D api
-    class B,E,F,G,H core
+    class B,E,F,G core
     class I storage
-    class J,K,L,M analysis
-    class T,U,V,W,X,Y,Z,AA structure
+    class J,K,L,M,N,O analysis
+    class V,W,X,Y,Z,AA,BB,CC structure
 ```
 
 ## Quick Start
