@@ -127,44 +127,49 @@ from army_levees.core.visualize_levee import plot_summary
 plot_summary(save_dir="plots")
 ```
 
-## Understanding the Visualizations
+## CLI
 
-### Individual Levee Plots
-- **Top Plot**: Shows elevation profiles
-  * Blue line: NLD elevation
-  * Red line: 3DEP elevation
-  * Gaps indicate filtered sections (e.g., zero elevations)
-  * Stats show coverage and mean differences
+The package provides command-line tools for sampling and analyzing levee systems:
 
-- **Bottom Plot**: Shows difference distribution
-  * Histogram of NLD - 3DEP differences
-  * Red line at zero for reference
-  * Helps identify systematic biases
+### Sample Levees
+```bash
+# Get 10 new random levee samples
+poetry run python -m army_levees.core.sample_levees -n 10
 
-### Summary Plots
-1. **Distribution of Levee Lengths**
-   - Histogram showing system size distribution
-   - Helps identify typical levee lengths
+# Include already processed systems in sampling
+poetry run python -m army_levees.core.sample_levees -n 10 --include_existing
 
-2. **Mean Elevation Difference vs Length**
-   - Scatter plot of differences vs system length
-   - Shows if longer systems have different characteristics
+# Control concurrent connections
+poetry run python -m army_levees.core.sample_levees -n 10 --max_concurrent 8
+```
 
-3. **CDF of Differences**
-   - Shows cumulative distribution of differences
-   - Helps identify overall bias and spread
+### Visualize Levees
+```bash
+# Plot a specific levee system
+poetry run python -m army_levees.core.visualize_levee 5205000591
 
-4. **Boxplot of Differences**
-   - Separates positive and negative differences
-   - Shows median, quartiles, and outliers
+# Plot a random levee system
+poetry run python -m army_levees.core.visualize_levee -r
 
-5. **Distribution of Mean Differences**
-   - Histogram with KDE showing difference distribution
-   - Red line at zero for reference
+# Create summary plots for all processed levees
+poetry run python -m army_levees.core.visualize_levee -s
 
-6. **Valid Data Coverage**
-   - Shows percentage of valid comparison points
-   - Higher is better (typically >95%)
+# Specify custom save directory
+poetry run python -m army_levees.core.visualize_levee -r --save_dir custom_plots
+```
+
+### CLI Arguments
+
+**sample_levees.py**:
+- `-n, --n_samples`: Number of systems to sample (default: 10)
+- `--include_existing`: Include already processed systems in sampling
+- `--max_concurrent`: Maximum number of concurrent connections (default: 4)
+
+**visualize_levee.py**:
+- `system_id`: USACE system ID to plot
+- `-r, --random`: Plot a random levee system
+- `-s, --summary`: Create summary plots for all processed levees
+- `--save_dir`: Directory to save plots (default: plots)
 
 ## Project Structure
 
@@ -196,23 +201,6 @@ Each parquet file contains:
 - `distance_along_track`: Distance along levee (meters)
 - `geometry`: Point geometry (EPSG:4326)
 
-## Common Issues & Solutions
-
-1. **Zero Elevations**
-   - Problem: Some sections show zero elevation in either dataset
-   - Solution: Automatically filtered out in analysis
-
-2. **Missing Data**
-   - Problem: Gaps in elevation data
-   - Solution: Sections split at gaps >100m
-
-3. **Outliers**
-   - Problem: Extreme elevation differences
-   - Solution: Z-score filtering (threshold = 3)
-
-4. **Floodwalls**
-   - Problem: Different characteristics than levees
-   - Solution: Automatically detected and excluded
 
 ## Contributing
 
