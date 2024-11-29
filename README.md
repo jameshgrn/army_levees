@@ -56,26 +56,8 @@ graph TD
         S6 --> G
     end
 
-    subgraph Visualization
-        H --> I[Single System Plots]
-        H --> J[Summary Statistics]
-
-        subgraph Single_System_Visualization
-            I --> K[Elevation Profile Plot]
-            I --> L[Difference Histogram]
-        end
-
-        subgraph Summary_Visualization
-            J --> M[Length Distribution]
-            J --> N[Mean Diff vs Length]
-            J --> O[CDF of Differences]
-        end
-    end
-
     subgraph Data_Storage
         F -->|save_parquet| P[(Processed Data)]
-        P -->|load_parquet| I
-        P -->|load_parquet| J
     end
 
     linkStyle default stroke-width:2px
@@ -83,14 +65,11 @@ graph TD
     style Data_Collection fill:#f4f4f4,stroke:#333,stroke-width:2px
     style Data_Processing fill:#e8f4ea,stroke:#333,stroke-width:2px
     style Filtering_Process fill:#f4e8ea,stroke:#333,stroke-width:2px
-    style Visualization fill:#e8e8f4,stroke:#333,stroke-width:2px
     style Data_Storage fill:#f4f4e8,stroke:#333,stroke-width:2px
 
     style Validation_Checks fill:#fff,stroke:#333,stroke-width:2px
     style Segment_Processing fill:#fff,stroke:#333,stroke-width:2px
     style Floodwall_Check fill:#fff,stroke:#333,stroke-width:2px
-    style Single_System_Visualization fill:#fff,stroke:#333,stroke-width:2px
-    style Summary_Visualization fill:#fff,stroke:#333,stroke-width:2px
 ```
 
 ## Quick Start
