@@ -1,19 +1,73 @@
+# Common OS files
+.DS_Store
+Thumbs.db
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+
+# Office files
+*.pptx
+*.docx
+*.xlsx
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.whl
+*.egg
+*.egg-info/
+dist/
+build/
+*.parquet
+
+# Virtual environments
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# VSCode
+.vscode/
+
+# Logs and databases
+*.log
+*.sqlite3
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*.orig
+*.save
+*.backup
+*.cache
+*.whisper/
+.cache/
+.temp/
+data/
+.history/
+plots/*.html
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.tiff
+*.ico
+
+# Miscellaneous
 all_ERDC_levees.zip
 artificiallevees.pptx
-
-.history/
-.venv/
-.whisper/
-.vscode/
-cache/
-temp/
-data/
-*.pptx
-*.png
-*.gif
-.DS_Store
-
-
-*.parquet
-.DS_Store
-.DS_Store
