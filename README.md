@@ -12,78 +12,79 @@ This package helps collect and analyze elevation data for USACE levee systems by
 ## System Architecture
 
 ```mermaid
-graph TD
-    %% Data Sources
-    A[National Levee Database API] -->|Async HTTP Requests| B[sample_levees.py]
-    D[USGS 3DEP Elevation API] -->|Elevation Queries| B
+flowchart TD
+    %% APIs
+    NLD[National Levee Database API] -->|Async HTTP Requests| sample[sample_levees.py]
+    DEP[USGS 3DEP Elevation API] -->|Elevation Queries| sample
 
-    %% Core Processing Details
-    subgraph "sample_levees.py Processing"
-        B -->|1. Get System IDs| E[get_usace_system_ids]
-        B -->|2. Get Profile| F[get_nld_profile_async]
-        B -->|3. Get Elevations| G[get_3dep_elevations_async]
-        B -->|4. Process Data| H[process_system_async]
+    %% Error Handling
+    subgraph error[Error Handling]
+        retry[Retry Logic] --> timeouts[HTTP Timeouts]
+        timeouts --> invalid[Invalid Data Filtering]
+        invalid --> missing[Missing Value Handling]
+    end
 
-        E -->|Returns List| F
-        F -->|Returns Coords| G
-        G -->|Returns Elevs| H
+    %% Data Processing Steps
+    subgraph processing[Data Processing Steps]
+        direction LR
+        step1[1. Fetch Raw Data] --> step2[2. Convert Units feet → meters]
+        step2 --> step3[3. Filter Invalid Points]
+        step3 --> step4[4. Calculate Differences]
+        step4 --> step5[5. Save to Parquet]
+    end
 
-        H -->|Creates| H1[GeoDataFrame]
-        H1 -->|Contains| H2[system_id<br/>elevation<br/>dep_elevation<br/>difference<br/>geometry]
+    %% Sample Levees Processing
+    subgraph sample_processing[sample_levees.py]
+        get_ids[get_usace_system_ids] -->|Returns List| get_profile[get_nld_profile_async]
+        get_profile -->|Returns Coords| get_elev[get_3dep_elevations_async]
+        get_elev -->|Returns Elevs| process[process_system_async]
+        process -->|Creates| gdf[GeoDataFrame]
     end
 
     %% Data Storage
-    H -->|Save| I[(Parquet Files<br/>data/processed/*.parquet)]
+    gdf -->|Save| parquet[(Parquet Files<br/>data/processed/*.parquet)]
 
-    %% Visualization Pipeline
-    subgraph "visualize_levee.py Processing"
-        I -->|Load| J[plot_levee_system]
-        I -->|Load Multiple| S[plot_summary]
+    %% Visualization
+    subgraph viz[visualize_levee.py]
+        parquet -->|Load| plot_system[plot_levee_system]
+        parquet -->|Load Multiple| plot_summary[plot_summary]
 
-        J -->|Creates| K[Individual Plots]
-        K -->|Top Plot| K1[Elevation Profile<br/>NLD vs 3DEP]
-        K -->|Bottom Plot| K2[Difference<br/>Distribution]
+        plot_system -->|Creates| individual[Individual Plots]
+        individual -->|Top| profile[Elevation Profile<br/>NLD vs 3DEP]
+        individual -->|Bottom| dist[Difference Distribution]
 
-        S -->|Creates| L[Summary Plots]
-        L -->|Plot 1| L1[Levee Lengths<br/>Distribution]
-        L -->|Plot 2| L2[Mean Difference<br/>vs Length]
-        L -->|Plot 3| L3[Difference CDF]
-        L -->|Plot 4| L4[Positive/Negative<br/>Differences]
-        L -->|Plot 5| L5[Mean Difference<br/>Distribution]
-        L -->|Plot 6| L6[Valid Data<br/>Coverage]
+        plot_summary -->|Creates| summary[Summary Plots]
+        summary -->|1| lengths[Levee Lengths Distribution]
+        summary -->|2| mean_diff[Mean Difference vs Length]
+        summary -->|3| cdf[Difference CDF]
+        summary -->|4| pos_neg[Positive/Negative Differences]
+        summary -->|5| mean_dist[Mean Difference Distribution]
+        summary -->|6| coverage[Valid Data Coverage]
     end
 
-    %% Data Flow Details
-    subgraph "Data Processing Steps"
+    %% GeoDataFrame Contents
+    subgraph data[GeoDataFrame Contents]
         direction LR
-        Z1[1. Fetch Raw Data] --> Z2[2. Convert Units<br/>feet → meters]
-        Z2 --> Z3[3. Filter Invalid<br/>Points]
-        Z3 --> Z4[4. Calculate<br/>Differences]
-        Z4 --> Z5[5. Save to<br/>Parquet]
+        system_id[system_id] --- elev[elevation]
+        elev --- dep[dep_elevation]
+        dep --- diff[difference]
+        diff --- geom[geometry]
     end
 
-    %% Error Handling
-    subgraph "Error Handling"
-        Y1[Retry Logic] --> Y2[HTTP Timeouts]
-        Y2 --> Y3[Invalid Data<br/>Filtering]
-        Y3 --> Y4[Missing Value<br/>Handling]
-    end
+    %% Styling
+    classDef api fill:#f9f,stroke:#333,stroke-width:2px
+    classDef process fill:#bfb,stroke:#333,stroke-width:2px
+    classDef storage fill:#bbf,stroke:#333,stroke-width:2px
+    classDef viz fill:#fbb,stroke:#333,stroke-width:2px
+    classDef error fill:#ffb,stroke:#333,stroke-width:2px
+    classDef data fill:#ddd,stroke:#333,stroke-width:1px
 
-    %% Style Definitions
-    classDef api fill:#f9f,stroke:#333,stroke-width:2px,rx:5px
-    classDef process fill:#bfb,stroke:#333,stroke-width:2px,rx:5px
-    classDef storage fill:#bbf,stroke:#333,stroke-width:2px,rx:5px
-    classDef viz fill:#fbb,stroke:#333,stroke-width:2px,rx:5px
-    classDef error fill:#ffb,stroke:#333,stroke-width:2px,rx:5px
-    classDef step fill:#ddd,stroke:#333,stroke-width:1px,rx:5px
-
-    %% Apply Styles
-    class A,D api
-    class B,E,F,G,H process
-    class I storage
-    class J,K,L,K1,K2,L1,L2,L3,L4,L5,L6 viz
-    class Y1,Y2,Y3,Y4 error
-    class Z1,Z2,Z3,Z4,Z5 step
+    class NLD,DEP api
+    class sample_processing,process,get_ids,get_profile,get_elev process
+    class parquet storage
+    class viz,plot_system,plot_summary,individual,summary,profile,dist,lengths,mean_diff,cdf,pos_neg,mean_dist,coverage viz
+    class error,retry,timeouts,invalid,missing error
+    class data,system_id,elev,dep,diff,geom data
 ```
 
 ## Quick Start
@@ -202,7 +203,7 @@ army_levees/
 ├── army_levees/          # Main package
 │   └── core/            # Core functionality
 │       ├── nld_api.py   # NLD API interface
-│       ├── sample_levees.py  # Sampling functions
+│       ├��─ sample_levees.py  # Sampling functions
 │       └── visualize_levee.py  # Visualization
 ├── data/
 │   └── processed/       # Processed parquet files
