@@ -34,6 +34,9 @@ eemont = "^0.3.6"
 statsmodels = "^0.14.1"
 requests = "^2.31.0"
 utm = "^0.7.0"
+contextily = "^1.6.2"
+fastdtw = "^0.3.4"
+fastkml = "^1.0.0"
 
 
 [tool.poetry.group.dev.dependencies]

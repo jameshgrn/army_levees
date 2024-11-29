@@ -30,4 +30,5 @@ def plot_profiles(path_nld, path_3dep):
     plt.grid(True)
     plt.show()
 
-plot_profiles('data/elevation_data_3405000052_nld_epsg26917.parquet', 'data/elevation_data_3405000052_tep_epsg26917.parquet')
+# plot_profiles('data/elevation_data_3405000052_nld_epsg26917.parquet', 'data/elevation_data_3405000052_tep_epsg26917.parquet')
+plot_profiles('data/elevation_data_2205000071_nld_epsg26913.parquet', 'data/elevation_data_2205000071_tep_epsg26913.parquet')

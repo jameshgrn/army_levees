@@ -7,6 +7,13 @@ import cartopy.feature as cfeatures
 from cartopy.io.img_tiles import GoogleTiles
 import matplotlib.colors as colors
 import numpy as np
+from shapely.geometry import Point
+
+'''
+Updates on _yl:
+- Export a excel table (site_coordinates.xlsx) with system_id and lat/lon of the sites
+- Save the excel table to "data"
+'''
 
 # Directory where the elevation data files are saved
 data_dir = '/Users/liyuan/projects/army_levees/data'
@@ -20,7 +27,12 @@ def load_and_process_data():
             for f in os.listdir(data_dir) if f.endswith('.parquet')]
     if not gdfs:
         return gpd.GeoDataFrame()  # return empty GeoDataFrame if no files found
-    return pd.concat(gdfs, ignore_index=True)
+    combined_gdf = pd.concat(gdfs, ignore_index=True)
+    
+    # Create and export the Excel file
+    create_coordinates_excel(combined_gdf)
+    
+    return combined_gdf
 
 def calculate_mean_differences(plot_df):
     mean_differences = []
@@ -107,6 +119,25 @@ def plot_mean_elevation_diff_histogram(mean_differences):
     plt.savefig(output_path, dpi=300)
     print(f"Saved mean elevation difference histogram to {output_path}")
     plt.close()
+
+def create_coordinates_excel(gdf):
+    # Create a new DataFrame for the Excel table
+    excel_data = []
+    for system_id, group in gdf.groupby('system_id'):
+        first_row = group.iloc[0]
+        if isinstance(first_row['geometry'], Point):
+            lat, lon = first_row['geometry'].y, first_row['geometry'].x
+        else:
+            # If geometry is not a Point, take the first point of the geometry
+            lat, lon = first_row['geometry'].coords[0][1], first_row['geometry'].coords[0][0]
+        excel_data.append({'system_id': system_id, 'latitude': lat, 'longitude': lon})
+    
+    excel_df = pd.DataFrame(excel_data)
+
+    # Export the DataFrame to Excel
+    excel_output_path = os.path.join(data_dir, 'site_coordinates.xlsx')
+    excel_df.to_excel(excel_output_path, index=False)
+    print(f"Saved site coordinates to {excel_output_path}")
 
 if __name__ == "__main__":
     plot_df = load_and_process_data()

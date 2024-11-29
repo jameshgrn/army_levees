@@ -12,6 +12,11 @@ from matplotlib.colors import Normalize
 
 import matplotlib.patheffects as pe
 from utils import read_and_parse_elevation_data, plot_profiles
+
+import ee
+# ee.Authenticate()
+ee.Initialize()
+
 filepath = '/Users/jakegearon/projects/army_levees/elevation_data_100sample.parquet'
 df = gpd.read_parquet(filepath)
 print(type(df))

@@ -16,11 +16,15 @@ import time
 import ee
 import geemap
 import utm
+import shutil
+import glob
+from scipy.stats import zscore
 
 # Initialize the Earth Engine library.
 ee.Authenticate()
 ee.Initialize()
 
+example_system_id = 5705000030
 
 CRS = "EPSG:4269"
 get_url = 'https://levees.sec.usace.army.mil:443/api-local/system-categories/usace-nonusace'
@@ -296,87 +300,238 @@ def save_elevation_data(elevation_data, system_id, epsg_code, source, directory=
     elevation_data.to_parquet(filename)
     print(f"Saved elevation data for system ID {system_id} ({source}) to {filename}")
 
-if __name__ == "__main__":
-    usace_ids_url = 'https://levees.sec.usace.army.mil:443/api-local/system-categories/usace-nonusace'
-    download_usace_system_ids(usace_ids_url)
-    usace_system_ids = load_usace_system_ids()
+def get_and_save_dem_raster(profile_gdf, system_id, output_dir):
+    """
+    Download and save the DEM raster data for the region that envelopes the elevation profile.
+    """
+    bounds = profile_gdf.total_bounds
+    vrt_path = f"temp_{system_id}.vrt"
+    tiff_path = os.path.join(output_dir, f"dem_raster_{system_id}.tif")
+    cache_dir = "cache"  # py3dep default cache directory
     
-    target_sample_count = 35 # change this to 2, get 2 random things
-    successful_samples = 0
-    max_attempts = 1000  # Limit the number of attempts to avoid infinite loops
-    attempts = 0
-
-    valid_ids = set()
-    invalid_ids = set()
-    
-    # Load previously processed IDs if files exist
     try:
-        with open('valid_system_ids.txt', 'r') as f:
-            valid_ids = set(f.read().splitlines())
-        with open('invalid_system_ids.txt', 'r') as f:
-            invalid_ids = set(f.read().splitlines())
-    except FileNotFoundError:
-        pass
+        # Download DEM data as a VRT file
+        get_dem_vrt_with_retry(bounds, resolution=1, vrt_path=vrt_path, tiff_dir=cache_dir, crs=profile_gdf.crs)
+        
+        # Find the most recently created tiff file in the cache directory
+        cache_files = glob.glob(os.path.join(cache_dir, "*.tiff"))
+        if cache_files:
+            latest_file = max(cache_files, key=os.path.getctime)
+            # Copy and rename the file to our desired location
+            shutil.copy2(latest_file, tiff_path)
+            print(f"DEM raster copied from {latest_file} to {tiff_path}")
+        
+        # Clean up
+        if os.path.exists(vrt_path):
+            os.remove(vrt_path)
+            
+        print(f"DEM raster saved to: {tiff_path}")
+        return tiff_path
+    except RetryError as e:
+        print(f"Error downloading DEM raster: {e}")
+        return None
+    except Exception as e:
+        print(f"Unexpected error saving DEM raster: {e}")
+        return None
 
-    with tqdm(total=target_sample_count, desc="Processing system IDs") as pbar:
-        while successful_samples < target_sample_count and attempts < max_attempts:
-            random_system_ids = np.random.choice(usace_system_ids, target_sample_count - successful_samples)
-            for system_id in random_system_ids:
-                if system_id in valid_ids or system_id in invalid_ids:
-                    continue  # Skip already processed IDs
+def check_dem_resolution(tiff_path):
+    """
+    Check the spatial resolution of the DEM raster.
+    
+    Args:
+        tiff_path: Path to the DEM raster file
+    """
+    try:
+        with rasterio.open(tiff_path) as src:
+            # Get the transform object
+            transform = src.transform
+            
+            # Resolution in units of the CRS (usually meters)
+            x_res = abs(transform[0])  # pixel width
+            y_res = abs(transform[4])  # pixel height
+            
+            print(f"DEM Resolution:")
+            print(f"X resolution: {x_res} meters")
+            print(f"Y resolution: {y_res} meters")
+            print(f"CRS: {src.crs}")
+            print(f"Shape (rows, cols): {src.shape}")
+            print(f"Bounds: {src.bounds}")
+            
+            return x_res, y_res
+    except Exception as e:
+        print(f"Error reading DEM raster: {e}")
+        return None, None
+
+def filter_elevation_profiles(profile_gdf, elevation_data_full):
+    """
+    Filter elevation profiles by removing zeros, aligning measurements, and removing outliers.
+    
+    Args:
+        profile_gdf: GeoDataFrame with NLD profile data
+        elevation_data_full: GeoDataFrame with DEM-extracted profile data
+    
+    Returns:
+        Filtered and merged DataFrame with both elevation profiles
+    """
+    # Create dataframes with only necessary columns
+    df_nld = pd.DataFrame({
+        'system_id': profile_gdf['system_id'],
+        'distance_along_track': profile_gdf['distance_along_track'],
+        'elevation': profile_gdf['elevation']
+    })
+    
+    df_3dep = pd.DataFrame({
+        'system_id': elevation_data_full['system_id'],
+        'distance_along_track': elevation_data_full['distance_along_track'],
+        'elevation': elevation_data_full['elevation']
+    })
+    
+    # Remove zero elevations from NLD data
+    df_nld = df_nld[df_nld['elevation'] != 0]
+    
+    # Merge the two dataframes on 'system_id' and 'distance_along_track'
+    merged = pd.merge(df_nld, df_3dep, on=['system_id', 'distance_along_track'], suffixes=('_nld', '_tep'))
+    
+    # Remove rows where either elevation is NaN, None, or empty string
+    merged = merged.dropna(subset=['elevation_nld', 'elevation_tep'])
+    merged = merged[(merged['elevation_nld'] != '') & (merged['elevation_tep'] != '')]
+    
+    # Ensure elevations are numeric
+    merged['elevation_nld'] = pd.to_numeric(merged['elevation_nld'], errors='coerce')
+    merged['elevation_tep'] = pd.to_numeric(merged['elevation_tep'], errors='coerce')
+    
+    # Filter out rows with NaN values
+    merged = merged.dropna(subset=['elevation_nld', 'elevation_tep'])
+    
+    # Calculate z-scores for elevation columns
+    merged['zscore_nld'] = zscore(merged['elevation_nld'])
+    merged['zscore_tep'] = zscore(merged['elevation_tep'])
+    
+    # Remove outliers (z-score beyond ±3)
+    merged_filtered = merged[
+        (merged['zscore_nld'].abs() <= 3) & 
+        (merged['zscore_tep'].abs() <= 3)
+    ]
+    
+    return merged_filtered
+
+def plot_elevation_profiles(profile_gdf, elevation_data_full, system_id, output_dir):
+    """
+    Plot elevation profiles from both NLD and DEM data.
+    """
+    # Filter the elevation profiles
+    merged_filtered = filter_elevation_profiles(profile_gdf, elevation_data_full)
+    
+    plt.figure(figsize=(12, 6))
+    
+    # Plot both profiles using filtered data
+    plt.plot(merged_filtered['distance_along_track'], 
+             merged_filtered['elevation_nld'], 
+             'b-', label='NLD Profile', linewidth=2)
+    
+    plt.plot(merged_filtered['distance_along_track'], 
+             merged_filtered['elevation_tep'], 
+             'r--', label='DEM Profile', linewidth=2)
+    
+    # Add labels and title
+    plt.xlabel('Distance Along Track (m)')
+    plt.ylabel('Elevation (m)')
+    plt.title(f'Elevation Profiles Comparison - System ID: {system_id} (Filtered)')
+    plt.grid(True)
+    plt.legend()
+    
+    # Save the plot
+    plot_path = os.path.join(output_dir, f'elevation_profiles_{system_id}_filtered.png')
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print(f"Filtered elevation profiles plot saved to: {plot_path}")
+
+def save_track_shapefile(profile_gdf, elevation_data_full, system_id, output_dir):
+    """
+    Save the levee track as shapefiles (both line and points).
+    
+    Args:
+        profile_gdf: GeoDataFrame with NLD profile data
+        elevation_data_full: GeoDataFrame with DEM-extracted profile data
+        system_id: System ID
+        output_dir: Directory to save the shapefiles
+    """
+    # Create line geometry from points
+    line_coords = [(row.x, row.y) for _, row in profile_gdf.iterrows()]
+    line = LineString(line_coords)
+    
+    # Create GeoDataFrame with the line
+    track_gdf = gpd.GeoDataFrame(
+        {'system_id': [system_id], 'geometry': [line]}, 
+        crs=profile_gdf.crs
+    )
+    
+    # Save shapefiles
+    track_path = os.path.join(output_dir, f'levee_track_{system_id}.shp')
+    points_path = os.path.join(output_dir, f'levee_points_{system_id}.shp')
+    
+    track_gdf.to_file(track_path)
+    elevation_data_full.to_file(points_path)
+    
+    print(f"Track shapefile saved to: {track_path}")
+    print(f"Points shapefile saved to: {points_path}")
+
+if __name__ == "__main__":
+    # Define the output directory
+    output_dir = "/Users/liyuan/Documents/Files/Postdoc - project/Artificial Levee"
+    os.makedirs(output_dir, exist_ok=True)
+    
+    system_id = example_system_id
+    print(f"Processing system ID: {system_id}")
+    
+    profile_data, profile_gdf, epsg_code = get_profile_data(system_id)
+    if profile_data:
+        profile_gdf['source'] = 'nld'
+        profile_gdf['elevation'] = profile_gdf['elevation'] * .3048
+        try:
+            # Download and save the DEM raster
+            dem_path = get_and_save_dem_raster(profile_gdf, system_id, output_dir)
+            if dem_path is None:
+                print(f"Failed to save DEM raster for system ID {system_id}")
+            else:
+                # Check the resolution of the saved DEM
+                check_dem_resolution(dem_path)
+            
+            # Get elevation profiles
+            elevation_data_full = get_elevation_data(profile_gdf, system_id, epsg_code)
+            if elevation_data_full is None:
+                print(f"Skipping system ID {system_id} due to missing elevation data.")
+            else:
+                profile_gdf = profile_gdf.to_crs(f'EPSG:{epsg_code}')
                 
-                attempts += 1
-                if system_id not in usace_system_ids:
-                    tqdm.write(f"System ID {system_id} not in the provided system_ids list.")
-                    continue
-                profile_data, profile_gdf, epsg_code = get_profile_data(system_id)
-                if profile_data:
-                    profile_gdf['source'] = 'nld'
-                    profile_gdf['elevation'] = profile_gdf['elevation'] * .3048
-                    try:
-                        elevation_data_full = get_elevation_data(profile_gdf, system_id, epsg_code)
-                        if elevation_data_full is None:
-                            tqdm.write(f"Skipping system ID {system_id} due to missing elevation data.")
-                            continue
+                if not elevation_data_full.empty:
+                    elevation_data_full['source'] = 'tep'
+                    elevation_data_full = clip_to_nld_extent(elevation_data_full, profile_gdf)
+                    mean_elevation_3dep = elevation_data_full['elevation'].mean()
+                    mean_elevation_nld = profile_gdf['elevation'].mean()
+                    print(f"Mean elevation (3DEP): {mean_elevation_3dep:.2f} m")
+                    print(f"Mean elevation (NLD): {mean_elevation_nld:.2f} m")
+                    
+                    # Check for NaN values
+                    if elevation_data_full['elevation'].isna().any() or profile_gdf['elevation'].isna().any():
+                        print(f"Skipping system ID {system_id} due to NaN values in elevation data.")
+                    else:
+                        # Save the elevation data
+                        save_elevation_data(elevation_data_full, system_id, epsg_code, source='tep', directory=output_dir)
+                        save_elevation_data(profile_gdf, system_id, epsg_code, source='nld', directory=output_dir)
                         
-                        profile_gdf = profile_gdf.to_crs(f'EPSG:{epsg_code}')
+                        # Save the track as shapefiles
+                        save_track_shapefile(profile_gdf, elevation_data_full, system_id, output_dir)
                         
-                        if not elevation_data_full.empty:
-                            elevation_data_full['source'] = 'tep'
-                            elevation_data_full = clip_to_nld_extent(elevation_data_full, profile_gdf)
-                            mean_elevation_3dep = elevation_data_full['elevation'].mean()
-                            mean_elevation_nld = profile_gdf['elevation'].mean()
-                            tqdm.write(f"Mean elevation (3DEP): {mean_elevation_3dep:.2f} m")
-                            tqdm.write(f"Mean elevation (NLD): {mean_elevation_nld:.2f} m")
-                            
-                            # Check for NaN values
-                            if elevation_data_full['elevation'].isna().any() or profile_gdf['elevation'].isna().any():
-                                tqdm.write(f"Skipping system ID {system_id} due to NaN values in elevation data.")
-                                continue
-                            
-                            # Save the elevation data for this system
-                            save_elevation_data(elevation_data_full, system_id, epsg_code, source='tep')
-                            save_elevation_data(profile_gdf, system_id, epsg_code, source='nld')
-                            
-                            successful_samples += 1
-                            pbar.update(1)
-                            if successful_samples >= target_sample_count:
-                                break
+                        # Plot the elevation profiles
+                        plot_elevation_profiles(profile_gdf, elevation_data_full, system_id, output_dir)
                         
-                    except Exception as e:
-                        tqdm.write(f"Error processing system ID {system_id}: {str(e)}")
-                    valid_ids.add(system_id)
-                else:
-                    invalid_ids.add(system_id)
-
-                # Periodically save processed IDs
-                if attempts % 100 == 0:
-                    save_system_ids(valid_ids, invalid_ids)
-
-    # Save final set of processed IDs
-    save_system_ids(valid_ids, invalid_ids)
-
-    if successful_samples < target_sample_count:
-        tqdm.write(f"Only {successful_samples} samples were successfully processed out of the requested {target_sample_count}.")
+                        print(f"Successfully processed and saved data for system ID: {system_id}")
+                
+        except Exception as e:
+            print(f"Error processing system ID {system_id}: {str(e)}")
+    else:
+        print(f"Could not get profile data for system ID: {system_id}")
 
 # %%
