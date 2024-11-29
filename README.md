@@ -13,31 +13,31 @@ This package helps collect and analyze elevation data for USACE levee systems by
 
 ```mermaid
 graph TD
-    subgraph Data Collection
+    subgraph Data_Collection
         A[USACE System IDs] -->|get_usace_system_ids| B[Random Sample Selection]
         B -->|get_random_levees_async| C[Async Processing]
         C -->|get_nld_profile_async| D[NLD Profile Data]
         C -->|get_3dep_elevations_async| E[3DEP Elevation Data]
     end
 
-    subgraph Data Processing
+    subgraph Data_Processing
         D --> F[Create GeoDataFrame]
         E --> F
         F --> G[Valid Segments]
         G -->|calculate| H[Elevation Differences]
     end
 
-    subgraph Filtering Process
+    subgraph Filtering_Process
         F -->|Input Data| V0[Initial Data]
 
-        subgraph Validation Checks
+        subgraph Validation_Checks
             V1[NLD elevation > 1.0m] --> VM[Validation Mask]
             V2[3DEP elevation > 1.0m] --> VM
             V3[No missing NLD data] --> VM
             V4[No missing 3DEP data] --> VM
         end
 
-        subgraph Segment Processing
+        subgraph Segment_Processing
             V0 --> S1[Apply Validation Mask]
             VM -->|filter| S1
             S1 --> S2[Sort by Distance]
@@ -47,7 +47,7 @@ graph TD
             S5 -->|z-score > 3| S6[Final Valid Segments]
         end
 
-        subgraph Floodwall Check
+        subgraph Floodwall_Check
             V0 -->|check segments| FW[Has Floodwalls?]
             FW -->|yes| Skip[Skip System]
             FW -->|no| S1
@@ -60,37 +60,37 @@ graph TD
         H --> I[Single System Plots]
         H --> J[Summary Statistics]
 
-        subgraph Single System Visualization
+        subgraph Single_System_Visualization
             I --> K[Elevation Profile Plot]
             I --> L[Difference Histogram]
         end
 
-        subgraph Summary Visualization
+        subgraph Summary_Visualization
             J --> M[Length Distribution]
             J --> N[Mean Diff vs Length]
             J --> O[CDF of Differences]
         end
     end
 
-    subgraph Data Storage
+    subgraph Data_Storage
         F -->|save_parquet| P[(Processed Data)]
         P -->|load_parquet| I
         P -->|load_parquet| J
     end
 
-    classDef processing fill:#f9f,stroke:#333,stroke-width:2px
-    classDef visualization fill:#bbf,stroke:#333,stroke-width:2px
-    classDef storage fill:#bfb,stroke:#333,stroke-width:2px
-    classDef collection fill:#ffb,stroke:#333,stroke-width:2px
-    classDef filtering fill:#ffd,stroke:#333,stroke-width:2px
-    classDef validation fill:#dff,stroke:#333,stroke-width:2px
+    linkStyle default stroke-width:2px
 
-    class A,B,C,D,E collection
-    class F,G,H processing
-    class I,J,K,L,M,N,O visualization
-    class P storage
-    class V0,S1,S2,S3,S4,S5,S6,Skip filtering
-    class V1,V2,V3,V4,VM,FW validation
+    style Data_Collection fill:#f4f4f4,stroke:#333,stroke-width:2px
+    style Data_Processing fill:#e8f4ea,stroke:#333,stroke-width:2px
+    style Filtering_Process fill:#f4e8ea,stroke:#333,stroke-width:2px
+    style Visualization fill:#e8e8f4,stroke:#333,stroke-width:2px
+    style Data_Storage fill:#f4f4e8,stroke:#333,stroke-width:2px
+
+    style Validation_Checks fill:#fff,stroke:#333,stroke-width:2px
+    style Segment_Processing fill:#fff,stroke:#333,stroke-width:2px
+    style Floodwall_Check fill:#fff,stroke:#333,stroke-width:2px
+    style Single_System_Visualization fill:#fff,stroke:#333,stroke-width:2px
+    style Summary_Visualization fill:#fff,stroke:#333,stroke-width:2px
 ```
 
 ## Quick Start
