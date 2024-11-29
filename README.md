@@ -13,52 +13,77 @@ This package helps collect and analyze elevation data for USACE levee systems by
 
 ```mermaid
 graph TD
-    %% Data Sources & API Handling
-    A[NLD API] -->|Async Fetch| B[sample_levees.py]
-    D[3DEP API] -->|Elevation Data| B
+    %% Data Sources
+    A[National Levee Database API] -->|Async HTTP Requests| B[sample_levees.py]
+    D[USGS 3DEP Elevation API] -->|Elevation Queries| B
 
-    %% Core Processing Pipeline
-    subgraph Core Processing [army_levees/core]
-        B -->|Process & Save| I[(data/processed/*.parquet)]
+    %% Core Processing Details
+    subgraph "sample_levees.py Processing"
+        B -->|1. Get System IDs| E[get_usace_system_ids]
+        B -->|2. Get Profile| F[get_nld_profile_async]
+        B -->|3. Get Elevations| G[get_3dep_elevations_async]
+        B -->|4. Process Data| H[process_system_async]
+
+        E -->|Returns List| F
+        F -->|Returns Coords| G
+        G -->|Returns Elevs| H
+
+        H -->|Creates| H1[GeoDataFrame]
+        H1 -->|Contains| H2[system_id<br/>elevation<br/>dep_elevation<br/>difference<br/>geometry]
     end
 
-    %% Analysis & Visualization
-    subgraph Analysis & Visualization
-        I -->|Load| J[visualize_levee.py]
-        J --> K[Individual Plots]
-        J --> L[Summary Plots]
+    %% Data Storage
+    H -->|Save| I[(Parquet Files<br/>data/processed/*.parquet)]
+
+    %% Visualization Pipeline
+    subgraph "visualize_levee.py Processing"
+        I -->|Load| J[plot_levee_system]
+        I -->|Load Multiple| S[plot_summary]
+
+        J -->|Creates| K[Individual Plots]
+        K -->|Top Plot| K1[Elevation Profile<br/>NLD vs 3DEP]
+        K -->|Bottom Plot| K2[Difference<br/>Distribution]
+
+        S -->|Creates| L[Summary Plots]
+        L -->|Plot 1| L1[Levee Lengths<br/>Distribution]
+        L -->|Plot 2| L2[Mean Difference<br/>vs Length]
+        L -->|Plot 3| L3[Difference CDF]
+        L -->|Plot 4| L4[Positive/Negative<br/>Differences]
+        L -->|Plot 5| L5[Mean Difference<br/>Distribution]
+        L -->|Plot 6| L6[Valid Data<br/>Coverage]
     end
 
-    %% Data Schema
-    subgraph Parquet Schema
-        I --> |Contains| M[system_id]
-        I --> |Contains| N[elevation]
-        I --> |Contains| O[dep_elevation]
-        I --> |Contains| P[difference]
-        I --> |Contains| Q[distance_along_track]
-        I --> |Contains| R[geometry]
+    %% Data Flow Details
+    subgraph "Data Processing Steps"
+        direction LR
+        Z1[1. Fetch Raw Data] --> Z2[2. Convert Units<br/>feet → meters]
+        Z2 --> Z3[3. Filter Invalid<br/>Points]
+        Z3 --> Z4[4. Calculate<br/>Differences]
+        Z4 --> Z5[5. Save to<br/>Parquet]
     end
 
-    %% Module Organization
-    subgraph Project Structure
-        S[army_levees]
-        S --> T[core/]
-        T --> U[sample_levees.py]
-        T --> V[visualize_levee.py]
+    %% Error Handling
+    subgraph "Error Handling"
+        Y1[Retry Logic] --> Y2[HTTP Timeouts]
+        Y2 --> Y3[Invalid Data<br/>Filtering]
+        Y3 --> Y4[Missing Value<br/>Handling]
     end
 
-    %% Style
-    classDef api fill:#f9f,stroke:#333,stroke-width:2px
-    classDef core fill:#bfb,stroke:#333,stroke-width:2px
-    classDef storage fill:#bbf,stroke:#333,stroke-width:2px
-    classDef analysis fill:#fbb,stroke:#333,stroke-width:2px
-    classDef structure fill:#ddd,stroke:#333,stroke-width:1px
+    %% Style Definitions
+    classDef api fill:#f9f,stroke:#333,stroke-width:2px,rx:5px
+    classDef process fill:#bfb,stroke:#333,stroke-width:2px,rx:5px
+    classDef storage fill:#bbf,stroke:#333,stroke-width:2px,rx:5px
+    classDef viz fill:#fbb,stroke:#333,stroke-width:2px,rx:5px
+    classDef error fill:#ffb,stroke:#333,stroke-width:2px,rx:5px
+    classDef step fill:#ddd,stroke:#333,stroke-width:1px,rx:5px
 
+    %% Apply Styles
     class A,D api
-    class B core
+    class B,E,F,G,H process
     class I storage
-    class J,K,L analysis
-    class S,T,U,V structure
+    class J,K,L,K1,K2,L1,L2,L3,L4,L5,L6 viz
+    class Y1,Y2,Y3,Y4 error
+    class Z1,Z2,Z3,Z4,Z5 step
 ```
 
 ## Quick Start
