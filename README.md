@@ -23,18 +23,37 @@ graph TD
     subgraph Data Processing
         D --> F[Create GeoDataFrame]
         E --> F
-        F -->|filter_valid_segments| G[Valid Segments]
+        F --> G[Valid Segments]
         G -->|calculate| H[Elevation Differences]
     end
 
-    subgraph Filtering Conditions
-        V1[NLD elevation > 1.0m] --> V[Valid Data]
-        V2[3DEP elevation > 1.0m] --> V
-        V3[No missing NLD data] --> V
-        V4[No missing 3DEP data] --> V
-        V5[No floodwalls] --> V
-        V6[Gap < 100m] --> V
-        V -->|influences| G
+    subgraph Filtering Process
+        F -->|Input Data| V0[Initial Data]
+
+        subgraph Validation Checks
+            V1[NLD elevation > 1.0m] --> VM[Validation Mask]
+            V2[3DEP elevation > 1.0m] --> VM
+            V3[No missing NLD data] --> VM
+            V4[No missing 3DEP data] --> VM
+        end
+
+        subgraph Segment Processing
+            V0 --> S1[Apply Validation Mask]
+            VM -->|filter| S1
+            S1 --> S2[Sort by Distance]
+            S2 --> S3[Calculate Distance Gaps]
+            S3 -->|Gap > 100m| S4[Split into Sections]
+            S4 --> S5[Remove Outliers]
+            S5 -->|z-score > 3| S6[Final Valid Segments]
+        end
+
+        subgraph Floodwall Check
+            V0 -->|check segments| FW[Has Floodwalls?]
+            FW -->|yes| Skip[Skip System]
+            FW -->|no| S1
+        end
+
+        S6 --> G
     end
 
     subgraph Visualization
@@ -64,12 +83,14 @@ graph TD
     classDef storage fill:#bfb,stroke:#333,stroke-width:2px
     classDef collection fill:#ffb,stroke:#333,stroke-width:2px
     classDef filtering fill:#ffd,stroke:#333,stroke-width:2px
+    classDef validation fill:#dff,stroke:#333,stroke-width:2px
 
     class A,B,C,D,E collection
     class F,G,H processing
     class I,J,K,L,M,N,O visualization
     class P storage
-    class V1,V2,V3,V4,V5,V6,V filtering
+    class V0,S1,S2,S3,S4,S5,S6,Skip filtering
+    class V1,V2,V3,V4,VM,FW validation
 ```
 
 ## Quick Start
