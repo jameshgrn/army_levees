@@ -24,15 +24,6 @@ flowchart TD
         invalid --> missing[Missing Value Handling]
     end
 
-    %% Data Processing Steps
-    subgraph processing[Data Processing Steps]
-        direction LR
-        get_nld[Get NLD Profile] --> convert[Convert Coordinates]
-        convert --> filter[Filter Invalid Data]
-        filter --> calc[Calculate Differences]
-        calc --> save[Save to Parquet]
-    end
-
     %% Sample Levees Processing
     subgraph sample_processing[sample_levees.py]
         get_ids[get_usace_system_ids] -->|Returns List| get_profile[get_nld_profile_async]
@@ -41,50 +32,29 @@ flowchart TD
         process -->|Creates| gdf[GeoDataFrame]
     end
 
+    %% Data Processing Steps
+    subgraph processing[Data Processing Steps]
+        direction LR
+        step1[Get NLD Profile] --> step2[Convert Coordinates]
+        step2 --> step3[Filter Invalid Data]
+        step3 --> step4[Calculate Differences]
+        step4 --> step5[Save to Parquet]
+    end
+
     %% Data Storage
     gdf -->|Save| parquet[(Parquet Files<br/>data/processed/*.parquet)]
-
-    %% Visualization
-    subgraph viz[visualize_levee.py]
-        parquet -->|Load| plot_system[plot_levee_system]
-        parquet -->|Load Multiple| plot_summary[plot_summary]
-
-        plot_system -->|Creates| individual[Individual Plots]
-        individual -->|Top| profile[Elevation Profile<br/>NLD vs 3DEP]
-        individual -->|Bottom| dist[Difference Distribution]
-
-        plot_summary -->|Creates| summary[Summary Plots]
-        summary -->|1| lengths[Levee Lengths Distribution]
-        summary -->|2| mean_diff[Mean Difference vs Length]
-        summary -->|3| cdf[Difference CDF]
-        summary -->|4| pos_neg[Positive/Negative Differences]
-        summary -->|5| mean_dist[Mean Difference Distribution]
-        summary -->|6| coverage[Valid Data Coverage]
-    end
-
-    %% GeoDataFrame Contents
-    subgraph data[GeoDataFrame Contents]
-        direction LR
-        system_id[system_id] --- elev[elevation]
-        elev --- dep[dep_elevation]
-        dep --- diff[difference]
-        diff --- geom[geometry]
-    end
 
     %% Styling
     classDef api fill:#f9f,stroke:#333,stroke-width:2px
     classDef process fill:#bfb,stroke:#333,stroke-width:2px
     classDef storage fill:#bbf,stroke:#333,stroke-width:2px
-    classDef viz fill:#fbb,stroke:#333,stroke-width:2px
     classDef error fill:#ffb,stroke:#333,stroke-width:2px
-    classDef data fill:#ddd,stroke:#333,stroke-width:1px
 
     class NLD,DEP api
     class sample_processing,process,get_ids,get_profile,get_elev process
     class parquet storage
-    class viz,plot_system,plot_summary,individual,summary,profile,dist,lengths,mean_diff,cdf,pos_neg,mean_dist,coverage viz
+    class step1,step2,step3,step4,step5 process
     class error,retry,timeouts,invalid,missing error
-    class data,system_id,elev,dep,diff,geom data
 ```
 
 ## Quick Start
