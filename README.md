@@ -161,16 +161,22 @@ poetry run python -m army_levees.core.sample_levees -n 10 --max_concurrent 8
 ### Visualize Levees
 ```bash
 # Plot a specific levee system
-poetry run python -m army_levees.core.visualize_levee 5205000591
+poetry run python -m army_levees.core.visualize_levee --plot 5205000591
 
 # Plot a random levee system
-poetry run python -m army_levees.core.visualize_levee -r
+poetry run python -m army_levees.core.visualize_levee --plot --random
 
 # Create summary plots for all processed levees
-poetry run python -m army_levees.core.visualize_levee -s
+poetry run python -m army_levees.core.visualize_levee --summary
+
+# Create interactive map of all levees
+poetry run python -m army_levees.core.visualize_levee --map
+
+# Run diagnostics on a specific system
+poetry run python -m army_levees.core.visualize_levee --diagnose 5205000591
 
 # Specify custom save directory
-poetry run python -m army_levees.core.visualize_levee -r --save_dir custom_plots
+poetry run python -m army_levees.core.visualize_levee --plot --random --save_dir custom_plots
 ```
 
 ### CLI Arguments
@@ -181,10 +187,13 @@ poetry run python -m army_levees.core.visualize_levee -r --save_dir custom_plots
 - `--max_concurrent`: Maximum number of concurrent connections (default: 4)
 
 **visualize_levee.py**:
-- `system_id`: USACE system ID to plot
-- `-r, --random`: Plot a random levee system
+- `system_id`: USACE system ID to plot (required with --plot or --diagnose)
+- `-r, --random`: Use a random levee system
+- `-p, --plot`: Create plots for the system
 - `-s, --summary`: Create summary plots for all processed levees
-- `--save_dir`: Directory to save plots (default: plots)
+- `-d, --diagnose`: Run diagnostics on the system
+- `-m, --map`: Create interactive summary map
+- `--save_dir`: Directory to save outputs (default: plots)
 
 ## Project Structure
 
