@@ -146,7 +146,7 @@ poetry shell
 
 ### 1. Get Random Levee Samples
 ```python
-from army_levees import get_random_levees
+from army_levees.core.sample_levees import get_random_levees
 
 # Get 10 new random samples (skips already processed systems)
 results = get_random_levees(n_samples=10, max_concurrent=4)
@@ -155,9 +155,12 @@ results = get_random_levees(n_samples=10, max_concurrent=4)
 ### 2. Plot Individual Levee System
 ```python
 from army_levees.core.visualize.individual import plot_elevation_profile
+from army_levees.core.visualize.utils import load_levee_data
 
-# Create visualization for a specific system
-plot_elevation_profile("5205000591", save_dir="plots")
+# Load and visualize a specific system
+data = load_levee_data("5205000591")
+if data is not None:
+    plot_elevation_profile(data)
 ```
 
 ### 3. Analyze Existing Dataset
@@ -174,6 +177,14 @@ from army_levees.core.visualize.interactive import create_summary_map
 
 # Generate interactive map of all systems
 create_summary_map(save_path="plots/levee_summary_map.html")
+```
+
+### 5. Run Diagnostics
+```python
+from army_levees.core.visualize.individual import diagnose_elevation_differences
+
+# Print diagnostic information for a system
+diagnose_elevation_differences("5205000591")
 ```
 
 ## CLI
