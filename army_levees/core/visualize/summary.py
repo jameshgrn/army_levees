@@ -336,11 +336,7 @@ def format_consistency_panel(ax):
 
 
 def plot_summary(save_dir: Path = Path("plots")) -> None:
-    """Create a 6-panel summary plot of levee statistics focused on geomorphic change.
-
-    Args:
-        save_dir: Directory to save the plot
-    """
+    """Create a 6-panel summary plot of levee statistics focused on geomorphic change."""
     # Get system statistics
     df = collect_system_statistics()
 
@@ -348,9 +344,12 @@ def plot_summary(save_dir: Path = Path("plots")) -> None:
     df["degradation"] = df["mean_diff"].apply(
         lambda x: "Degradation" if x < -0.5 else "Aggradation" if x > 0.5 else "Stable"
     )
-    df["relative_change"] = (
-        df["mean_diff"] / df["mean_elevation"]
-    ) * 100  # percent change
+    
+    # Add this line to export the CSV files
+    export_system_ids_by_category(df, Path("data/system_id_summary"))
+    
+    # Rest of the existing function remains the same...
+    df["relative_change"] = (df["mean_diff"] / df["mean_elevation"]) * 100
 
     # Calculate change consistency (what percentage of points agree with mean change direction)
     def calculate_change_consistency(row):
@@ -528,3 +527,30 @@ def plot_summary(save_dir: Path = Path("plots")) -> None:
         f"Aggradation (> 0.5m): {(df['degradation'] == 'Aggradation').sum()} systems "
         f"({(df['degradation'] == 'Aggradation').mean()*100:.1f}%)"
     )
+
+
+def export_system_ids_by_category(df: pd.DataFrame, save_dir: Path) -> None:
+    """Export system IDs grouped by change category.
+    
+    Args:
+        df: DataFrame with system statistics
+        save_dir: Directory to save CSV files
+    """
+    # Create directory if it doesn't exist
+    save_dir = Path(save_dir)
+    save_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Group systems by category and export
+    for category in ['Degradation', 'Stable', 'Aggradation']:
+        # Get systems in this category
+        systems = df[df['degradation'] == category][['system_id', 'mean_diff']]
+        
+        # Sort by absolute mean difference
+        systems = systems.sort_values('mean_diff', 
+                                    ascending=(category == 'Degradation'),
+                                    key=abs if category == 'Stable' else None)
+        
+        # Save to CSV
+        filename = f'system_id_{category.lower()}.csv'
+        systems.to_csv(save_dir / filename, index=False)
+        logger.info(f"Saved {len(systems)} {category.lower()} system IDs to {save_dir / filename}")
