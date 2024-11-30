@@ -145,28 +145,3 @@ def get_processed_systems() -> List[str]:
     if not processed_dir.exists():
         return []
     return [f.stem.replace("levee_", "") for f in processed_dir.glob("levee_*.parquet")]
-
-
-def check_zero_elevations() -> None:
-    """Check for systems with partial zero elevations in their NLD data."""
-    import glob
-
-    # Get all parquet files
-    files = glob.glob("data/processed/levee_*.parquet")
-
-    # Check each file
-    partial_zeros = []
-    for f in files:
-        df = pd.read_parquet(f)
-        zeros = (df["elevation"] == 0).sum()
-        total = len(df)
-        if (
-            zeros > 0 and zeros / total < 0.9
-        ):  # Systems with some zeros but not too many
-            partial_zeros.append((f.split("/")[-1], zeros, total))
-
-    logger.info(
-        f"\nFound {len(partial_zeros)} systems with some zero elevations (but <90%):"
-    )
-    for file, zeros, total in partial_zeros:
-        logger.info(f"{file}: {zeros}/{total} zeros ({zeros/total*100:.1f}%)")

@@ -24,6 +24,9 @@ dist/
 build/
 *.parquet
 
+# Flake8
+.flake8
+
 # Virtual environments
 .venv/
 env/
@@ -71,3 +74,7 @@ plots/*.html
 # Miscellaneous
 all_ERDC_levees.zip
 artificiallevees.pptx
+
+.history/
+.venv/
+.thoughts

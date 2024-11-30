@@ -79,7 +79,7 @@ def main():
         plot_summary(save_dir=save_dir)
     elif args.map:
         # Create interactive map
-        map_path = save_dir / "levee_summary_map.html"
+        map_path = str(save_dir / "levee_summary_map.html")
         summary_map = create_summary_map(save_path=map_path)
         if summary_map:
             print(f"Saved summary map to {map_path}")
