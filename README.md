@@ -224,6 +224,21 @@ poetry run python -m army_levees.core.visualize_levee --diagnose 5205000591
 poetry run python -m army_levees.core.visualize_levee --plot --random --save_dir custom_plots
 ```
 
+### Multi Profile Plot
+```bash
+# Plot all profile types
+python -m army_levees.core.visualize.multi_profile_plot --type all
+
+# Plot only degradation profiles
+python -m army_levees.core.visualize.multi_profile_plot --type degradation
+
+# Plot only stable profiles
+python -m army_levees.core.visualize.multi_profile_plot --type stable
+
+# Specify custom directories
+python -m army_levees.core.visualize.multi_profile_plot --type all --data_dir custom/data/path --output_dir custom/output/path
+```
+
 ### CLI Arguments
 
 **sample_levees.py**:
