@@ -8,6 +8,7 @@ This package helps collect and analyze elevation data for USACE levee systems by
 1. Getting profile data from the NLD API
 2. Getting matching elevations from USGS 3DEP
 3. Comparing and visualizing the differences
+4. Analyzing geomorphic changes and patterns
 
 ## System Architecture
 
@@ -31,20 +32,21 @@ graph TD
         F -->|Input Data| V0[Initial Data]
 
         subgraph Validation_Checks
-            V1[NLD elevation > 1.0m] --> VM[Validation Mask]
+            V1[NLD elevation > 0.01m] --> VM[Validation Mask]
             V2[3DEP elevation > 1.0m] --> VM
-            V3[No missing NLD data] --> VM
-            V4[No missing 3DEP data] --> VM
+            V3[No missing data] --> VM
+            V4[No extreme jumps] --> VM
+            V5[No unit mismatches] --> VM
         end
 
         subgraph Segment_Processing
             V0 --> S1[Apply Validation Mask]
             VM -->|filter| S1
             S1 --> S2[Sort by Distance]
-            S2 --> S3[Calculate Distance Gaps]
-            S3 -->|Gap > 100m| S4[Split into Sections]
-            S4 --> S5[Remove Outliers]
-            S5 -->|z-score > 3| S6[Final Valid Segments]
+            S2 --> S3[Calculate Differences]
+            S3 -->|Offset Check| S4[Check Mean Diff]
+            S4 -->|Std Dev Check| S5[Check Consistency]
+            S5 --> S6[Final Valid Segments]
         end
 
         subgraph Floodwall_Check
@@ -56,8 +58,24 @@ graph TD
         S6 --> G
     end
 
+    subgraph Analysis_Visualization
+        H --> V[Visualization Module]
+        V --> P1[Individual Plots]
+        V --> P2[Summary Statistics]
+        V --> P3[Interactive Maps]
+        V --> P4[Geomorphic Analysis]
+        
+        subgraph Change_Analysis
+            P4 --> CA1[Degradation Analysis]
+            P4 --> CA2[Aggradation Patterns]
+            P4 --> CA3[Change Consistency]
+            P4 --> CA4[Geographic Patterns]
+        end
+    end
+
     subgraph Data_Storage
         F -->|save_parquet| P[(Processed Data)]
+        P2 -->|save_summary| S[(Summary Stats)]
     end
 
     linkStyle default stroke-width:2px
@@ -65,11 +83,13 @@ graph TD
     style Data_Collection fill:#f4f4f4,stroke:#333,stroke-width:2px
     style Data_Processing fill:#e8f4ea,stroke:#333,stroke-width:2px
     style Filtering_Process fill:#f4e8ea,stroke:#333,stroke-width:2px
+    style Analysis_Visualization fill:#e8eaf4,stroke:#333,stroke-width:2px
     style Data_Storage fill:#f4f4e8,stroke:#333,stroke-width:2px
 
     style Validation_Checks fill:#fff,stroke:#333,stroke-width:2px
     style Segment_Processing fill:#fff,stroke:#333,stroke-width:2px
     style Floodwall_Check fill:#fff,stroke:#333,stroke-width:2px
+    style Change_Analysis fill:#fff,stroke:#333,stroke-width:2px
 ```
 
 ## Quick Start
@@ -96,12 +116,15 @@ poetry shell
    - Samples matching elevations from USGS 3DEP
    - Filters out floodwalls automatically
    - Handles coordinate system transformations
+   - Supports async/await for efficient data collection
 
 2. **Analysis**
    - Calculates elevation differences
-   - Removes outliers using z-score filtering
-   - Generates comprehensive statistics
    - Identifies problematic sections
+   - Analyzes geomorphic changes
+   - Detects degradation/aggradation patterns
+   - Geographic pattern analysis
+   - Change consistency metrics
 
 3. **Visualization**
    - Individual levee plots showing:
@@ -109,12 +132,15 @@ poetry shell
      * Difference distributions
      * Coverage statistics
    - Summary plots showing:
-     * Distribution of levee lengths
-     * Mean elevation differences vs length
-     * CDF of differences
-     * Boxplots of positive/negative differences
-     * Distribution of mean differences
-     * Valid data coverage
+     * Distribution of changes by category
+     * Cumulative change distributions
+     * Change consistency analysis
+     * Geographic patterns
+   - Interactive maps with:
+     * System locations
+     * Change magnitudes
+     * Elevation profiles
+     * Detailed statistics
 
 ## Usage Examples
 
@@ -123,23 +149,31 @@ poetry shell
 from army_levees import get_random_levees
 
 # Get 10 new random samples (skips already processed systems)
-results = get_random_levees(n_samples=10)
+results = get_random_levees(n_samples=10, max_concurrent=4)
 ```
 
 ### 2. Plot Individual Levee System
 ```python
-from army_levees import plot_levee_system
+from army_levees.core.visualize.individual import plot_elevation_profile
 
 # Create visualization for a specific system
-plot_levee_system("5205000591", save_dir="plots")
+plot_elevation_profile("5205000591", save_dir="plots")
 ```
 
 ### 3. Analyze Existing Dataset
 ```python
-from army_levees.core.visualize_levee import plot_summary
+from army_levees.core.visualize.summary import plot_summary
 
 # Generate summary plots and statistics
 plot_summary(save_dir="plots")
+```
+
+### 4. Create Interactive Map
+```python
+from army_levees.core.visualize.interactive import create_summary_map
+
+# Generate interactive map of all systems
+create_summary_map(save_path="plots/levee_summary_map.html")
 ```
 
 ## CLI
@@ -203,11 +237,14 @@ army_levees/
 │   └── core/            # Core functionality
 │       ├── nld_api.py   # NLD API interface
 │       ├── sample_levees.py  # Sampling functions
-│       └── visualize_levee.py  # Visualization
+│       └── visualize/   # Visualization modules
+│           ├── __init__.py
+│           ├── individual.py  # Individual system plots
+│           ├── interactive.py # Interactive maps
+│           ├── summary.py     # Summary statistics
+│           └── utils.py       # Shared utilities
 ├── data/
 │   └── processed/       # Processed parquet files
-│       ├── levee_*.parquet  # Individual system data
-│       └── dataset_summary.csv
 ├── docs/               # Documentation
 ├── plots/             # Generated plots
 ├── tests/             # Test suite
@@ -219,17 +256,19 @@ army_levees/
 
 Each parquet file contains:
 - `system_id`: USACE system ID
-- `elevation`: NLD elevation (meters, converted from feet)
+- `elevation`: NLD elevation (meters)
 - `dep_elevation`: 3DEP elevation (meters)
 - `difference`: NLD - 3DEP (meters)
 - `distance_along_track`: Distance along levee (meters)
 - `geometry`: Point geometry (EPSG:4326)
+- `elevation_diff`: Change between consecutive points
+- `elevation_diff_pct`: Percent change between points
 
 ## Contributing
 
 To add more samples to the dataset:
 1. Install the package as above
-2. Run `poetry run python scripts/sample_levees.py -n 10`
+2. Run `poetry run python -m army_levees.core.sample_levees -n 10`
 3. New samples will be added to `data/processed/`
 
 The script will:
@@ -250,6 +289,8 @@ Key packages (see pyproject.toml for full list):
 - py3dep (^0.16.2)
 - pyarrow (^15.0.0)
 - requests (^2.31.0)
+- folium (^0.15.0)
+- aiohttp (^3.9.1)
 
 ## Development
 
