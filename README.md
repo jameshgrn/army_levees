@@ -289,8 +289,23 @@ Key packages (see pyproject.toml for full list):
 - py3dep (^0.16.2)
 - pyarrow (^15.0.0)
 - requests (^2.31.0)
-- folium (^0.15.0)
-- aiohttp (^3.9.1)
+- duckdb (^0.9.2)
+- cartopy (^0.22.0)
+- scikit-learn (^1.3.2)
+- earthengine-api (^0.1.390)
+- geemap (^0.31.0)
+- statsmodels (^0.14.1)
+- utm (^0.7.0)
+
+Additional dependencies for specific functionality:
+- ccrs (^1.0.0) - Cartographic projections
+- matplotlib-scalebar (^0.8.1) - Map scale bars
+- topojson/geojson (^1.7/^3.1.0) - GeoJSON processing
+- geopy (^2.4.1) - Geocoding utilities
+- osmnx (^1.9.1) - OpenStreetMap data
+- segment-geospatial (^0.10.2) - Geospatial segmentation
+- pycrs (^1.0.2) - CRS transformations
+- eemont (^0.3.6) - Earth Engine utilities
 
 ## Development
 
