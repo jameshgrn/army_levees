@@ -145,3 +145,18 @@ def get_processed_systems() -> List[str]:
     if not processed_dir.exists():
         return []
     return [f.stem.replace("levee_", "") for f in processed_dir.glob("levee_*.parquet")]
+
+
+def get_utm_crs(lat: float, lon: float) -> int:
+    """Get UTM zone for coordinates."""
+    utm_band = str(int((lon + 180) / 6) + 1)
+    if lat > 0:
+        return int(f"326{utm_band}")
+    return int(f"327{utm_band}")
+
+
+def calculate_slope(elevations: pd.Series, distances: pd.Series) -> pd.Series:
+    """Calculate slope in degrees between consecutive points."""
+    elevation_diff = elevations.diff()
+    distance_diff = distances.diff()
+    return np.degrees(np.arctan2(np.abs(elevation_diff), distance_diff))

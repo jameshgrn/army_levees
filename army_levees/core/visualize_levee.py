@@ -3,6 +3,7 @@
 import argparse
 import random
 from pathlib import Path
+from tqdm import tqdm
 
 from .visualize.individual import (diagnose_elevation_differences,
                                    plot_elevation_profile)
@@ -21,11 +22,14 @@ def main():
     id_group.add_argument(
         "-r", "--random", action="store_true", help="Use a random levee system"
     )
+    id_group.add_argument(
+        "-a", "--all", action="store_true", help="Process all available systems"
+    )
 
     # Action group
     action_group = parser.add_mutually_exclusive_group(required=True)
     action_group.add_argument(
-        "-p", "--plot", action="store_true", help="Create plots for the system"
+        "-p", "--plot", action="store_true", help="Create plots for the system(s)"
     )
     action_group.add_argument(
         "-s",
@@ -34,7 +38,7 @@ def main():
         help="Create summary plots for all processed levees",
     )
     action_group.add_argument(
-        "-d", "--diagnose", action="store_true", help="Run diagnostics on the system"
+        "-d", "--diagnose", action="store_true", help="Run diagnostics on the system(s)"
     )
     action_group.add_argument(
         "-m", "--map", action="store_true", help="Create interactive summary map"
@@ -49,33 +53,39 @@ def main():
 
     args = parser.parse_args()
 
-    # Get system ID if needed
-    if not (args.summary or args.map):
-        if args.random:
-            # Get list of processed levee files
-            processed_systems = get_processed_systems()
-            if not processed_systems:
-                print("No processed levee files found.")
-                exit(1)
+    # Get system ID(s)
+    if args.all:
+        system_ids = get_processed_systems()
+        if not system_ids:
+            print("No processed levee files found.")
+            exit(1)
+        print(f"Processing {len(system_ids)} systems...")
+    elif args.random:
+        # Get list of processed levee files
+        processed_systems = get_processed_systems()
+        if not processed_systems:
+            print("No processed levee files found.")
+            exit(1)
 
-            # Pick a random system
-            system_id = random.choice(processed_systems)
-            print(f"Randomly selected system ID: {system_id}")
-        else:
-            if args.system_id is None:
-                parser.error("Either system_id or -r/--random is required")
-            system_id = args.system_id
+        # Pick a random system
+        system_ids = [random.choice(processed_systems)]
+        print(f"Randomly selected system ID: {system_ids[0]}")
+    else:
+        if args.system_id is None:
+            parser.error("Either system_id, -r/--random, or -a/--all is required")
+        system_ids = [args.system_id]
 
     save_dir = Path(args.save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
     # Execute requested action
     if args.diagnose:
-        diagnose_elevation_differences(system_id)
+        for system_id in system_ids:
+            print(f"\nDiagnosing system {system_id}:")
+            diagnose_elevation_differences(system_id)
     elif args.summary:
         # Create summary plots
         from .visualize.summary import plot_summary
-
         plot_summary(save_dir=save_dir)
     elif args.map:
         # Create interactive map
@@ -84,7 +94,8 @@ def main():
         if summary_map:
             print(f"Saved summary map to {map_path}")
     else:  # plot
-        plot_elevation_profile(system_id, save_dir=save_dir)
+        for system_id in tqdm(system_ids, desc="Creating plots"):
+            plot_elevation_profile(system_id, save_dir=save_dir)
 
 
 if __name__ == "__main__":

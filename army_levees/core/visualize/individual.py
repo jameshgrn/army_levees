@@ -19,7 +19,27 @@ def diagnose_elevation_differences(system_id: str) -> None:
     try:
         # Load data
         data = gpd.read_parquet(f"data/processed/levee_{system_id}.parquet")
-
+        
+        # Convert to UTM for more accurate distance measurements
+        center_point = data.geometry.unary_union.centroid
+        utm_crs = get_utm_crs(center_point.y, center_point.x)
+        data_utm = data.to_crs(utm_crs)
+        
+        # Calculate slope using 3DEP data
+        data_utm['slope'] = calculate_slope(data_utm['dep_elevation'], 
+                                         data_utm['distance_along_track'])
+        
+        # Estimate potential horizontal offset impact
+        data_utm['potential_elev_error'] = data_utm['slope'] * 10  # Assuming 10m horizontal error
+        
+        print(f"\nDiagnostics for system {system_id}:")
+        print(f"UTM Zone: {utm_crs}")
+        print(f"Mean slope: {data_utm['slope'].mean():.1f}°")
+        print(f"Max slope: {data_utm['slope'].max():.1f}°")
+        print(f"Potential elevation error from 10m horizontal offset:")
+        print(f"  Mean: {data_utm['potential_elev_error'].mean():.2f}m")
+        print(f"  Max: {data_utm['potential_elev_error'].max():.2f}m")
+        
         # Basic stats
         print(f"\nDiagnostics for system {system_id}:")
         print(f"Total points: {len(data)}")
@@ -63,19 +83,22 @@ def plot_elevation_profile(
         # Sort by distance for consistent plotting
         data = data.sort_values("distance_along_track")
 
-        # Create validity mask (only where NLD has data)
+        # Create validity mask
         valid_mask = data["elevation"] > 0
         valid_data = data[valid_mask].copy()
 
-        # Check if we have any valid points
-        if len(valid_data) == 0:
-            logger.error(f"No valid NLD points found for system {system_id}")
-            return None
+        # Check if max buffer values are different from point values
+        max_different = not np.allclose(
+            valid_data["dep_elevation"], 
+            valid_data["dep_elevation_max"],
+            rtol=1e-5,  # Relative tolerance
+            equal_nan=True
+        )
 
         # Create figure with two subplots
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 10))
 
-        # Plot 1: Elevation profiles (only where NLD has data)
+        # Plot 1: Elevation profiles
         ax1.plot(
             valid_data["distance_along_track"],
             valid_data["elevation"],
@@ -87,9 +110,22 @@ def plot_elevation_profile(
             valid_data["distance_along_track"],
             valid_data["dep_elevation"],
             "r.-",
-            label="3DEP",
+            label="3DEP (point)",
             alpha=0.7,
         )
+        
+        if max_different:
+            # Only plot max buffer line if it's different
+            ax1.plot(
+                valid_data["distance_along_track"],
+                valid_data["dep_elevation_max"],
+                "g--",  # Changed to dashed line
+                label="3DEP (3x3m max)",
+                alpha=0.5,  # More transparent
+            )
+        else:
+            # Add note to legend about identical values
+            ax1.plot([], [], 'k-', label="Note: 3x3m max = point values")
 
         # Add gaps in data
         if len(data) > len(valid_data):
@@ -135,11 +171,13 @@ def plot_elevation_profile(
         stats_text = (
             f"Total points: {len(data)}\n"
             f"Valid points: {len(valid_data)} ({100*len(valid_data)/len(data):.1f}%)\n"
-            f"Mean diff: {mean_diff:.2f}m\n"
-            f"Std dev: {std_diff:.2f}m\n"
-            f"Min diff: {differences.min():.2f}m\n"
-            f"Max diff: {differences.max():.2f}m"
+            f"Mean point diff: {valid_data['difference'].mean():.2f}m\n"
+            f"Mean max diff: {valid_data['difference_max'].mean():.2f}m\n"
+            f"Point std dev: {valid_data['difference'].std():.2f}m\n"
+            f"Max std dev: {valid_data['difference_max'].std():.2f}m"
         )
+        if not max_different:
+            stats_text += "\n(3x3m max values identical to point values)"
 
         ax1.text(
             0.02,
