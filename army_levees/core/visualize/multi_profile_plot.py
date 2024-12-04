@@ -26,24 +26,6 @@ class MultiProfilePlotter:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.profiles_per_page = 56  # 7x8 grid
         
-    def plot_all_profiles(self, data: pd.DataFrame) -> None:
-        """Plot all profiles in a grid, multiple pages if needed."""
-        system_ids = data['system_id'].unique()
-        num_systems = len(system_ids)
-        num_pages = math.ceil(num_systems / self.profiles_per_page)
-        
-        logger.info(f"Plotting {num_systems} systems across {num_pages} pages")
-        
-        for page in range(num_pages):
-            start_idx = page * self.profiles_per_page
-            end_idx = min((page + 1) * self.profiles_per_page, num_systems)
-            systems_subset = system_ids[start_idx:end_idx]
-            
-            title = f"All Levee Profiles (Page {page+1} of {num_pages})"
-            fig = self._create_profile_plot(data, title, page, systems_subset)
-            fig.savefig(self.output_dir / f"all_profiles_page{page+1}.png", dpi=300, bbox_inches='tight')
-            plt.close(fig)
-            
     def plot_degradation_profiles(self, data: pd.DataFrame) -> None:
         """Plot profiles showing degradation, multiple pages if needed."""
         system_ids = data['system_id'].unique()
@@ -236,9 +218,6 @@ def main():
             all_data = pd.concat(data, ignore_index=True)
             
             if args.type == 'all':
-                # Plot all profiles first
-                plotter.plot_all_profiles(all_data)
-                
                 # Create classifications
                 logger.info("Classifying levees...")
                 classifications = classify_levees(all_data, args.summary_dir)

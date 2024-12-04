@@ -15,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def extract_valid_segments(gdf: gpd.GeoDataFrame,
-                         zero_threshold: float = 0.0001,
+                         zero_threshold: float = 0.01,
                          min_points: int = 3,
                          max_elev_diff: float = 50.0) -> list[gpd.GeoDataFrame]:
     """Extract valid segments from a levee profile.
@@ -23,12 +23,23 @@ def extract_valid_segments(gdf: gpd.GeoDataFrame,
     Returns segments where we have valid data in both NLD and 3DEP.
     A valid segment must have:
     1. At least min_points with data in both datasets
-    2. Non-zero/non-missing elevations
+    2. Non-zero/non-missing elevations (> zero_threshold)
     3. Elevation differences less than max_elev_diff
     """
     try:
         # Sort by distance first
         gdf = gdf.sort_values('distance_along_track').copy()
+        
+        # Find near-zero points and log them
+        near_zero_mask = (
+            (np.abs(gdf['elevation']) < zero_threshold) | 
+            (np.abs(gdf['dep_elevation']) < zero_threshold)
+        )
+        if near_zero_mask.any():
+            near_zero_points = gdf[near_zero_mask]
+            logger.info(f"Found {len(near_zero_points)} points with near-zero elevations:")
+            logger.info(f"NLD range: {near_zero_points['elevation'].min():.6f}m to {near_zero_points['elevation'].max():.6f}m")
+            logger.info(f"3DEP range: {near_zero_points['dep_elevation'].min():.6f}m to {near_zero_points['dep_elevation'].max():.6f}m")
         
         # Find points where both datasets have valid data
         valid_mask = (
@@ -178,7 +189,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--zero-threshold",
         type=float,
-        default=0.0001,
+        default=0.01,
         help="Threshold for considering elevation as zero"
     )
     parser.add_argument(
