@@ -443,7 +443,29 @@ async def get_3dep_elevations_async(
                         f"({valid_mask.sum()/len(coords_list):.1%} coverage)"
                     )
                     
-                    return point_elevations, max_buffer_elevations
+                    # Additional validation of point and buffer elevations
+                    if point_elevations is not None and max_buffer_elevations is not None:
+                        # Check for too many missing values
+                        nan_ratio = np.isnan(point_elevations).mean()
+                        if nan_ratio > 0.5:  # Increased from 0.2 to 0.5
+                            logger.error(f"Too many missing 3DEP values ({nan_ratio:.1%})")
+                            return None
+                            
+                        # Only check for completely missing data, not zeros
+                        if np.all(np.isnan(point_elevations)):
+                            logger.error("No valid 3DEP elevations found")
+                            return None
+                            
+                        # Log coverage statistics
+                        valid_points = ~np.isnan(point_elevations)
+                        logger.info(
+                            f"3DEP coverage: {valid_points.mean():.1%} "
+                            f"({valid_points.sum()}/{len(point_elevations)} points)"
+                        )
+                        
+                        return point_elevations, max_buffer_elevations
+                        
+                    return None
                     
                 except Exception as e:
                     if attempt == max_retries - 1:
@@ -792,94 +814,39 @@ def filter_valid_segments(gdf: gpd.GeoDataFrame,
                          max_mean_diff: float = 20.0,
                          outlier_threshold: float = 3.0,
                          min_points: int = 10) -> gpd.GeoDataFrame:
-    """Filter and clean elevation profile data."""
+    """Filter a single levee profile.
+    
+    This is a light filter - just removes obvious errors.
+    Detailed filtering happens in filter_levees.py.
+    """
     try:
         # Sort by distance first
         gdf_sorted = gdf.sort_values('distance_along_track').copy()
-        # No need to recreate GeoDataFrame, copy() preserves GeoDataFrame type
         
-        # Calculate initial statistics
-        mean_diff = gdf_sorted['difference'].mean()
-        std_diff = gdf_sorted['difference'].std()
-        
-        logger.info(f"Initial elevation ranges:")
-        logger.info(f"NLD: {gdf_sorted['elevation'].min():.1f}m to {gdf_sorted['elevation'].max():.1f}m")
-        logger.info(f"3DEP: {gdf_sorted['dep_elevation'].min():.1f}m to {gdf_sorted['dep_elevation'].max():.1f}m")
-        logger.info(f"Differences: mean={mean_diff:.1f}m, std={std_diff:.1f}m")
-
-        # Identify outliers using rolling statistics
-        window = min(11, len(gdf_sorted) // 5)  # Use odd number for centered window
-        if window < 3:
-            window = 3
+        # Only filter out NaN values
+        nan_mask = gdf_sorted['elevation'].isna() | gdf_sorted['dep_elevation'].isna()
+        if nan_mask.any():
+            gdf_sorted = gdf_sorted[~nan_mask].copy()
             
-        # Calculate rolling statistics
-        rolling_med_nld = gdf_sorted['elevation'].rolling(window=window, center=True).median()
-        rolling_std_nld = gdf_sorted['elevation'].rolling(window=window, center=True).std()
-        rolling_med_3dep = gdf_sorted['dep_elevation'].rolling(window=window, center=True).median()
-        rolling_std_3dep = gdf_sorted['dep_elevation'].rolling(window=window, center=True).std()
-        
-        # Identify outliers
-        nld_outliers = (
-            (gdf_sorted['elevation'] - rolling_med_nld).abs() > 
-            (outlier_threshold * rolling_std_nld)
-        )
-        dep_outliers = (
-            (gdf_sorted['dep_elevation'] - rolling_med_3dep).abs() > 
-            (outlier_threshold * rolling_std_3dep)
-        )
-        
-        # Log outlier details
-        if nld_outliers.any():
-            outlier_vals = gdf.loc[nld_outliers]['elevation']
-            logger.info(f"Found {nld_outliers.sum()} NLD outliers:")
-            logger.info(f"Outlier values: {outlier_vals.tolist()}")
-            logger.info(f"At distances: {gdf.loc[nld_outliers]['distance_along_track'].tolist()}")
-            
-        if dep_outliers.any():
-            outlier_vals = gdf_sorted.loc[dep_outliers, 'dep_elevation']
-            logger.info(f"Found {dep_outliers.sum()} 3DEP outliers:")
-            logger.info(f"Outlier values: {outlier_vals.tolist()}")
-            logger.info(f"At distances: {gdf_sorted.loc[dep_outliers, 'distance_along_track'].tolist()}")
-        
-        # Interpolate outliers
-        if nld_outliers.any():
-            gdf_sorted.loc[nld_outliers, 'elevation'] = rolling_med_nld[nld_outliers]
-            
-        if dep_outliers.any():
-            gdf_sorted.loc[dep_outliers, 'dep_elevation'] = rolling_med_3dep[dep_outliers]
-        
-        # Recalculate differences after interpolation
-        gdf_sorted['difference'] = gdf_sorted['elevation'] - gdf_sorted['dep_elevation']
-        
-        # Calculate final statistics
-        final_mean_diff = gdf_sorted['difference'].mean()
-        final_std_diff = gdf_sorted['difference'].std()
-        
-        logger.info(f"\nAfter outlier removal:")
-        logger.info(f"Mean difference: {final_mean_diff:.1f}m")
-        logger.info(f"Std difference: {final_std_diff:.1f}m")
-        
-        # Check if differences are still too large
-        if abs(final_mean_diff) > max_mean_diff:
-            logger.error(
-                f"Large mean elevation difference ({final_mean_diff:.1f}m) remains after filtering. "
-                f"This suggests a systematic offset between NLD and 3DEP data."
-            )
-            return gpd.GeoDataFrame(columns=gdf_sorted.columns)
-            
-        # Remove std check since max_diff_std is None
-        
-        # Final validation
+        # Check minimum points
         if len(gdf_sorted) < min_points:
             logger.error(f"Too few points after filtering ({len(gdf_sorted)})")
-            return gpd.GeoDataFrame(columns=gdf_sorted.columns)
+            return gpd.GeoDataFrame(columns=gdf_sorted.columns, crs=gdf_sorted.crs)
             
-        logger.info(f"Final points after filtering: {len(gdf_sorted)}")
+        # Check if differences are too large
+        diff = gdf_sorted['elevation'] - gdf_sorted['dep_elevation']
+        if abs(diff.mean()) > max_mean_diff:
+            logger.error(
+                f"Large mean elevation difference ({diff.mean():.1f}m) "
+                f"This suggests a systematic offset between NLD and 3DEP data."
+            )
+            return gpd.GeoDataFrame(columns=gdf_sorted.columns, crs=gdf_sorted.crs)
+            
         return gdf_sorted
         
     except Exception as e:
         logger.error(f"Error in filter_valid_segments: {str(e)}")
-        return gpd.GeoDataFrame(columns=gdf.columns)
+        return gpd.GeoDataFrame(columns=gdf.columns, crs=gdf.crs)
 
 
 if __name__ == "__main__":
