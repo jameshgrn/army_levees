@@ -74,6 +74,38 @@ class MultiProfilePlotter:
             fig.savefig(self.output_dir / f"aggradation_profiles_page{page+1}.png", dpi=300, bbox_inches='tight')
             plt.close(fig)
 
+    def plot_significant_profiles(self, data: pd.DataFrame) -> None:
+        """Plot profiles showing significant changes, multiple pages if needed."""
+        system_ids = data['system_id'].unique()
+        num_systems = len(system_ids)
+        num_pages = math.ceil(num_systems / self.profiles_per_page)
+        
+        for page in range(num_pages):
+            start_idx = page * self.profiles_per_page
+            end_idx = min((page + 1) * self.profiles_per_page, num_systems)
+            systems_subset = system_ids[start_idx:end_idx]
+            
+            title = f"Significant Change Profiles (Page {page+1} of {num_pages})"
+            fig = self._create_profile_plot(data, title, page, systems_subset)
+            fig.savefig(self.output_dir / f"significant_profiles_page{page+1}.png", dpi=300, bbox_inches='tight')
+            plt.close(fig)
+            
+    def plot_non_significant_profiles(self, data: pd.DataFrame) -> None:
+        """Plot profiles showing non-significant changes, multiple pages if needed."""
+        system_ids = data['system_id'].unique()
+        num_systems = len(system_ids)
+        num_pages = math.ceil(num_systems / self.profiles_per_page)
+        
+        for page in range(num_pages):
+            start_idx = page * self.profiles_per_page
+            end_idx = min((page + 1) * self.profiles_per_page, num_systems)
+            systems_subset = system_ids[start_idx:end_idx]
+            
+            title = f"Non-significant Change Profiles (Page {page+1} of {num_pages})"
+            fig = self._create_profile_plot(data, title, page, systems_subset)
+            fig.savefig(self.output_dir / f"non_significant_profiles_page{page+1}.png", dpi=300, bbox_inches='tight')
+            plt.close(fig)
+
     def _create_profile_plot(self, data, title, fig_num, systems_subset):
         """
         Helper method to create a single figure with multiple profile plots
@@ -140,17 +172,15 @@ def classify_levees(data: pd.DataFrame, output_dir: str | Path) -> dict[str, lis
     Classify levees based on elevation differences between NLD and 3DEP.
     
     Classification criteria:
-    - Degradation: NLD > 3DEP by more than 1m on average
-    - Aggradation: 3DEP > NLD by more than 1m on average
-    - Stable: Difference within ±1m
+    - Significant: Mean change > 0.1m or < -0.1m
+    - Non-significant: Mean change between -0.1m and 0.1m
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     
     classifications = {
-        'degradation': [],
-        'aggradation': [],
-        'stable': []
+        'significant': [],
+        'non_significant': []
     }
     
     # Calculate mean difference for each system
@@ -158,12 +188,10 @@ def classify_levees(data: pd.DataFrame, output_dir: str | Path) -> dict[str, lis
         system_data = data[data['system_id'] == system_id]
         mean_diff = (system_data['elevation'] - system_data['dep_elevation']).mean()
         
-        if mean_diff > .50:
-            classifications['degradation'].append(system_id)
-        elif mean_diff < -0.50:
-            classifications['aggradation'].append(system_id)
+        if abs(mean_diff) > 0.1:
+            classifications['significant'].append(system_id)
         else:
-            classifications['stable'].append(system_id)
+            classifications['non_significant'].append(system_id)
     
     # Save classifications to CSV files
     for category, system_ids in classifications.items():
@@ -180,7 +208,7 @@ def main():
                        help='Directory containing filtered segments')
     parser.add_argument('--raw-data', action='store_true',
                        help='Use raw data from data/processed instead of filtered segments')
-    parser.add_argument('--type', type=str, choices=['all', 'degradation', 'aggradation', 'stable'],
+    parser.add_argument('--type', type=str, choices=['all', 'significant', 'non_significant'],
                        default='all', help='Type of profiles to plot')
     parser.add_argument('--output-dir', type=str, default='plots/profiles',
                        help='Directory to save output plots')
@@ -230,12 +258,10 @@ def main():
                         
                     classified_data = all_data[all_data['system_id'].isin(system_ids)]
                     
-                    if plot_type == 'degradation':
-                        plotter.plot_degradation_profiles(classified_data)
-                    elif plot_type == 'stable':
-                        plotter.plot_stable_profiles(classified_data)
-                    elif plot_type == 'aggradation':
-                        plotter.plot_aggradation_profiles(classified_data)
+                    if plot_type == 'significant':
+                        plotter.plot_significant_profiles(classified_data)
+                    elif plot_type == 'non_significant':
+                        plotter.plot_non_significant_profiles(classified_data)
                         
                     logger.info(f"Created plots for {len(system_ids)} {plot_type} profiles")
             else:
@@ -255,12 +281,10 @@ def main():
                     
                 classified_data = all_data[all_data['system_id'].isin(system_ids)]
                 
-                if args.type == 'degradation':
-                    plotter.plot_degradation_profiles(classified_data)
-                elif args.type == 'stable':
-                    plotter.plot_stable_profiles(classified_data)
-                elif args.type == 'aggradation':
-                    plotter.plot_aggradation_profiles(classified_data)
+                if args.type == 'significant':
+                    plotter.plot_significant_profiles(classified_data)
+                elif args.type == 'non_significant':
+                    plotter.plot_non_significant_profiles(classified_data)
                     
                 logger.info(f"Created plots for {len(system_ids)} {args.type} profiles")
         else:
