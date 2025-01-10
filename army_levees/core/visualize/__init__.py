@@ -1,18 +1,15 @@
-"""Visualization functions for army_levees."""
+"""Visualization package for army_levees."""
 
 from .individual import diagnose_elevation_differences, plot_elevation_profile
-from .interactive import create_summary_map, create_system_map
-from .summary import (analyze_geographic_patterns, analyze_large_differences,
-                      collect_system_statistics,
-                      investigate_problematic_systems)
+from .interactive import create_summary_map
+from .summary import plot_summary
+from .utils import get_processed_systems, load_system_data
 
 __all__ = [
-    "collect_system_statistics",
-    "analyze_large_differences",
-    "investigate_problematic_systems",
-    "analyze_geographic_patterns",
-    "plot_elevation_profile",
-    "diagnose_elevation_differences",
-    "create_system_map",
-    "create_summary_map",
+    'diagnose_elevation_differences',
+    'plot_elevation_profile',
+    'create_summary_map',
+    'plot_summary',
+    'get_processed_systems',
+    'load_system_data'
 ]

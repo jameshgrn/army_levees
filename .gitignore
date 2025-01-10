@@ -46,6 +46,7 @@ venv.bak/
 # Logs and databases
 *.log
 *.sqlite3
+*.sqlite
 
 # Temporary files
 *.tmp
@@ -80,3 +81,4 @@ artificiallevees.pptx
 .history/
 .venv/
 .thoughts
+cache/

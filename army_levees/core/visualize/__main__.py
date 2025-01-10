@@ -38,11 +38,25 @@ def main():
         default=Path("plots"),
         help="Output directory for plots",
     )
+    parser.add_argument(
+        "--data-dir",
+        type=Path,
+        default=Path("data/filtered"),
+        help="Directory containing levee data (default: data/filtered)",
+    )
+    parser.add_argument(
+        "--raw-data",
+        action="store_true",
+        help="Use raw data from data/processed instead of filtered data",
+    )
 
     args = parser.parse_args()
 
     # Create output directory
     args.output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Use raw or filtered data
+    data_dir = Path("data/processed") if args.raw_data else args.data_dir
 
     # Get total number of systems
     systems = get_processed_systems()

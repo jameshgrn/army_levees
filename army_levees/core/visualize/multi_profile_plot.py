@@ -5,12 +5,15 @@ import pandas as pd
 import numpy as np
 import argparse
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
 
 class MultiProfilePlotter:
     """
     A class to handle plotting multiple elevation profiles in a grid layout.
     """
-    def __init__(self, output_dir):
+    def __init__(self, output_dir: str):
         """
         Initialize the MultiProfilePlotter.
         
@@ -19,128 +22,89 @@ class MultiProfilePlotter:
         output_dir : str
             Directory where the output plots will be saved
         """
-        self.output_dir = output_dir
-        os.makedirs(output_dir, exist_ok=True)
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.profiles_per_page = 56  # 7x8 grid
         
-    def plot_degradation_profiles(self, filtered_degradation, profiles_per_plot=56):
-        """
-        Plot elevation profiles for degradation cases in a 7x8 grid
+    def plot_degradation_profiles(self, data: pd.DataFrame) -> None:
+        """Plot profiles showing degradation, multiple pages if needed."""
+        system_ids = data['system_id'].unique()
+        num_systems = len(system_ids)
+        num_pages = math.ceil(num_systems / self.profiles_per_page)
         
-        Parameters:
-        -----------
-        filtered_degradation : pandas.DataFrame
-            DataFrame containing the profile data for degradation cases
-        profiles_per_plot : int, optional
-            Number of profiles to include in each figure (default: 56 for 7x8 grid)
-        """
-        # Get unique system IDs
-        unique_systems = filtered_degradation['system_id'].unique()
-        num_systems = len(unique_systems)
-        
-        # Calculate number of figures needed
-        num_figures = math.ceil(num_systems / profiles_per_plot)
-        
-        for fig_num in range(num_figures):
-            # Get the subset of systems for this figure
-            start_idx = fig_num * profiles_per_plot
-            end_idx = min((fig_num + 1) * profiles_per_plot, num_systems)
-            systems_subset = unique_systems[start_idx:end_idx]
+        for page in range(num_pages):
+            start_idx = page * self.profiles_per_page
+            end_idx = min((page + 1) * self.profiles_per_page, num_systems)
+            systems_subset = system_ids[start_idx:end_idx]
             
-            # Create and save the figure
-            fig = self._create_profile_plot(
-                filtered_degradation, 
-                'Degradation Elevation Profiles (NLD vs TEP)', 
-                fig_num, 
-                systems_subset
-            )
-            
-            # Save figure
-            filename = f'degradation_profiles_part{fig_num + 1}.png'
-            filepath = os.path.join(self.output_dir, filename)
-            fig.savefig(filepath, dpi=300, bbox_inches='tight')
+            title = f"Degradation Profiles (Page {page+1} of {num_pages})"
+            fig = self._create_profile_plot(data, title, page, systems_subset)
+            fig.savefig(self.output_dir / f"degradation_profiles_page{page+1}.png", dpi=300, bbox_inches='tight')
             plt.close(fig)
             
-            print(f"Saved {filename}")
+    def plot_stable_profiles(self, data: pd.DataFrame) -> None:
+        """Plot stable profiles, multiple pages if needed."""
+        system_ids = data['system_id'].unique()
+        num_systems = len(system_ids)
+        num_pages = math.ceil(num_systems / self.profiles_per_page)
         
-    def plot_stable_profiles(self, filtered_stable, profiles_per_plot=56):
-        """
-        Plot elevation profiles for stable cases in a 7x8 grid
-        
-        Parameters:
-        -----------
-        filtered_stable : pandas.DataFrame
-            DataFrame containing the profile data for stable cases
-        profiles_per_plot : int, optional
-            Number of profiles to include in each figure (default: 56 for 7x8 grid)
-        """
-        # Get unique system IDs
-        unique_systems = filtered_stable['system_id'].unique()
-        num_systems = len(unique_systems)
-        
-        # Calculate number of figures needed
-        num_figures = math.ceil(num_systems / profiles_per_plot)
-        
-        for fig_num in range(num_figures):
-            # Get the subset of systems for this figure
-            start_idx = fig_num * profiles_per_plot
-            end_idx = min((fig_num + 1) * profiles_per_plot, num_systems)
-            systems_subset = unique_systems[start_idx:end_idx]
+        for page in range(num_pages):
+            start_idx = page * self.profiles_per_page
+            end_idx = min((page + 1) * self.profiles_per_page, num_systems)
+            systems_subset = system_ids[start_idx:end_idx]
             
-            # Create and save the figure
-            fig = self._create_profile_plot(
-                filtered_stable, 
-                'Stable Elevation Profiles (NLD vs TEP)', 
-                fig_num, 
-                systems_subset
-            )
-            
-            # Save figure
-            filename = f'stable_profiles_part{fig_num + 1}.png'
-            filepath = os.path.join(self.output_dir, filename)
-            fig.savefig(filepath, dpi=300, bbox_inches='tight')
+            title = f"Stable Profiles (Page {page+1} of {num_pages})"
+            fig = self._create_profile_plot(data, title, page, systems_subset)
+            fig.savefig(self.output_dir / f"stable_profiles_page{page+1}.png", dpi=300, bbox_inches='tight')
             plt.close(fig)
             
-            print(f"Saved {filename}")
+    def plot_aggradation_profiles(self, data: pd.DataFrame) -> None:
+        """Plot profiles showing aggradation, multiple pages if needed."""
+        system_ids = data['system_id'].unique()
+        num_systems = len(system_ids)
+        num_pages = math.ceil(num_systems / self.profiles_per_page)
+        
+        for page in range(num_pages):
+            start_idx = page * self.profiles_per_page
+            end_idx = min((page + 1) * self.profiles_per_page, num_systems)
+            systems_subset = system_ids[start_idx:end_idx]
+            
+            title = f"Aggradation Profiles (Page {page+1} of {num_pages})"
+            fig = self._create_profile_plot(data, title, page, systems_subset)
+            fig.savefig(self.output_dir / f"aggradation_profiles_page{page+1}.png", dpi=300, bbox_inches='tight')
+            plt.close(fig)
 
-    def plot_aggradation_profiles(self, filtered_aggradation, profiles_per_plot=56):
-        """
-        Plot elevation profiles for aggradation cases in a 7x8 grid
+    def plot_significant_profiles(self, data: pd.DataFrame) -> None:
+        """Plot profiles showing significant changes, multiple pages if needed."""
+        system_ids = data['system_id'].unique()
+        num_systems = len(system_ids)
+        num_pages = math.ceil(num_systems / self.profiles_per_page)
         
-        Parameters:
-        -----------
-        filtered_aggradation : pandas.DataFrame
-            DataFrame containing the profile data for aggradation cases
-        profiles_per_plot : int, optional
-            Number of profiles to include in each figure (default: 56 for 7x8 grid)
-        """
-        # Get unique system IDs
-        unique_systems = filtered_aggradation['system_id'].unique()
-        num_systems = len(unique_systems)
-        
-        # Calculate number of figures needed
-        num_figures = math.ceil(num_systems / profiles_per_plot)
-        
-        for fig_num in range(num_figures):
-            # Get the subset of systems for this figure
-            start_idx = fig_num * profiles_per_plot
-            end_idx = min((fig_num + 1) * profiles_per_plot, num_systems)
-            systems_subset = unique_systems[start_idx:end_idx]
+        for page in range(num_pages):
+            start_idx = page * self.profiles_per_page
+            end_idx = min((page + 1) * self.profiles_per_page, num_systems)
+            systems_subset = system_ids[start_idx:end_idx]
             
-            # Create and save the figure
-            fig = self._create_profile_plot(
-                filtered_aggradation, 
-                'Aggradation Elevation Profiles (NLD vs 3DEP)', 
-                fig_num, 
-                systems_subset
-            )
-            
-            # Save figure
-            filename = f'aggradation_profiles_part{fig_num + 1}.png'
-            filepath = os.path.join(self.output_dir, filename)
-            fig.savefig(filepath, dpi=300, bbox_inches='tight')
+            title = f"Significant Change Profiles (Page {page+1} of {num_pages})"
+            fig = self._create_profile_plot(data, title, page, systems_subset)
+            fig.savefig(self.output_dir / f"significant_profiles_page{page+1}.png", dpi=300, bbox_inches='tight')
             plt.close(fig)
             
-            print(f"Saved {filename}")
+    def plot_non_significant_profiles(self, data: pd.DataFrame) -> None:
+        """Plot profiles showing non-significant changes, multiple pages if needed."""
+        system_ids = data['system_id'].unique()
+        num_systems = len(system_ids)
+        num_pages = math.ceil(num_systems / self.profiles_per_page)
+        
+        for page in range(num_pages):
+            start_idx = page * self.profiles_per_page
+            end_idx = min((page + 1) * self.profiles_per_page, num_systems)
+            systems_subset = system_ids[start_idx:end_idx]
+            
+            title = f"Non-significant Change Profiles (Page {page+1} of {num_pages})"
+            fig = self._create_profile_plot(data, title, page, systems_subset)
+            fig.savefig(self.output_dir / f"non_significant_profiles_page{page+1}.png", dpi=300, bbox_inches='tight')
+            plt.close(fig)
 
     def _create_profile_plot(self, data, title, fig_num, systems_subset):
         """
@@ -173,19 +137,23 @@ class MultiProfilePlotter:
             system_data = data[data['system_id'] == system_id].sort_values('distance_along_track')
             
             # Plot profiles
-            # Plot NLD elevation with blue line and dots
             ax.plot(system_data['distance_along_track'], system_data['elevation'], 
                    'b-', linewidth=1, label='NLD')
             ax.plot(system_data['distance_along_track'], system_data['elevation'], 
                    'bo', markersize=3)
             
-            # Plot 3DEP elevation with red line and dots
             ax.plot(system_data['distance_along_track'], system_data['dep_elevation'], 
                    'r-', linewidth=1, label='3DEP')
             ax.plot(system_data['distance_along_track'], system_data['dep_elevation'], 
                    'ro', markersize=3)
             
-            ax.set_title(f'System ID: {system_id}', fontsize=8)
+            # Add segment info to title if data is segmented
+            if 'segment' in system_data.columns:
+                num_segments = system_data['segment'].nunique()
+                ax.set_title(f'System ID: {system_id}\n({num_segments} segments)', fontsize=8)
+            else:
+                ax.set_title(f'System ID: {system_id}', fontsize=8)
+            
             ax.legend(fontsize=6)
             ax.tick_params(labelsize=6)
             ax.grid(True, linestyle='--', alpha=0.7)
@@ -199,61 +167,132 @@ class MultiProfilePlotter:
         
         return fig
 
+def classify_levees(data: pd.DataFrame, output_dir: str | Path) -> dict[str, list[str]]:
+    """
+    Classify levees based on elevation differences between NLD and 3DEP.
+    
+    Classification criteria:
+    - Significant: Mean change > 0.1m or < -0.1m
+    - Non-significant: Mean change between -0.1m and 0.1m
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    classifications = {
+        'significant': [],
+        'non_significant': []
+    }
+    
+    # Calculate mean difference for each system
+    for system_id in data['system_id'].unique():
+        system_data = data[data['system_id'] == system_id]
+        mean_diff = (system_data['elevation'] - system_data['dep_elevation']).mean()
+        
+        if abs(mean_diff) > 0.1:
+            classifications['significant'].append(system_id)
+        else:
+            classifications['non_significant'].append(system_id)
+    
+    # Save classifications to CSV files
+    for category, system_ids in classifications.items():
+        if system_ids:  # Only save if we have systems in this category
+            df = pd.DataFrame({'system_id': system_ids})
+            df.to_csv(output_dir / f'system_id_{category}.csv', index=False)
+            logger.info(f"Found {len(system_ids)} {category} profiles")
+    
+    return classifications
+
 def main():
     parser = argparse.ArgumentParser(description='Plot elevation profiles in grid layout')
-    parser.add_argument('--data_dir', type=str, default='data/processed',
-                       help='Directory containing processed parquet files')
-    parser.add_argument('--summary_dir', type=str, default='data/system_id_summary',
-                       help='Directory containing classification CSV files')
-    parser.add_argument('--output_dir', type=str, default='plots/profiles',
-                       help='Directory to save output plots')
-    parser.add_argument('--type', type=str, choices=['all', 'degradation', 'aggradation', 'stable'],
+    parser.add_argument('--data-dir', type=str, default='data/segments',
+                       help='Directory containing filtered segments')
+    parser.add_argument('--raw-data', action='store_true',
+                       help='Use raw data from data/processed instead of filtered segments')
+    parser.add_argument('--type', type=str, choices=['all', 'significant', 'non_significant'],
                        default='all', help='Type of profiles to plot')
+    parser.add_argument('--output-dir', type=str, default='plots/profiles',
+                       help='Directory to save output plots')
+    parser.add_argument('--summary-dir', type=str, default='data/system_id_summary',
+                       help='Directory containing classification CSV files')
     
     args = parser.parse_args()
+    data_dir = 'data/processed' if args.raw_data else args.data_dir
     
-    # Initialize plotter
-    plotter = MultiProfilePlotter(args.output_dir)
-    
-    # Process based on type
-    if args.type in ['all', 'degradation']:
-        degradation_ids = pd.read_csv(os.path.join(args.summary_dir, 'system_id_degradation.csv'))
-        degradation_data = []
-        for system_id in degradation_ids['system_id']:
+    data = []
+    try:
+        # Get list of all system IDs
+        from army_levees.core.visualize.utils import get_processed_systems
+        system_ids = get_processed_systems(data_dir=data_dir)
+        
+        # Load data for each system
+        for system_id in system_ids:
             try:
-                profile = pd.read_parquet(os.path.join(args.data_dir, f'levee_{system_id}.parquet'))
-                degradation_data.append(profile)
-            except FileNotFoundError:
-                print(f"Warning: Could not find profile data for system {system_id}")
-        if degradation_data:
-            degradation_data = pd.concat(degradation_data, ignore_index=True)
-            plotter.plot_degradation_profiles(degradation_data)
-    
-    if args.type in ['all', 'stable']:
-        stable_ids = pd.read_csv(os.path.join(args.summary_dir, 'system_id_stable.csv'))
-        stable_data = []
-        for system_id in stable_ids['system_id']:
-            try:
-                profile = pd.read_parquet(os.path.join(args.data_dir, f'levee_{system_id}.parquet'))
-                stable_data.append(profile)
-            except FileNotFoundError:
-                print(f"Warning: Could not find profile data for system {system_id}")
-        if stable_data:
-            stable_data = pd.concat(stable_data, ignore_index=True)
-            plotter.plot_stable_profiles(stable_data)
-    
-    if args.type in ['all', 'aggradation']:
-        aggradation_ids = pd.read_csv(os.path.join(args.summary_dir, 'system_id_aggradation.csv'))
-        aggradation_data = []
-        for system_id in aggradation_ids['system_id']:
-            try:
-                profile = pd.read_parquet(os.path.join(args.data_dir, f'levee_{system_id}.parquet'))
-                aggradation_data.append(profile)
-            except FileNotFoundError:
-                print(f"Warning: Could not find profile data for system {system_id}")
-        if aggradation_data:
-            aggradation_data = pd.concat(aggradation_data, ignore_index=True)
-            plotter.plot_aggradation_profiles(aggradation_data)
+                if args.raw_data:
+                    profile = pd.read_parquet(os.path.join(data_dir, f'levee_{system_id}.parquet'))
+                else:
+                    segment_files = sorted(Path(data_dir).glob(f'levee_{system_id}_segment_*.parquet'))
+                    segments = [pd.read_parquet(f) for f in segment_files]
+                    profile = pd.concat(segments, ignore_index=True)
+                profile['system_id'] = system_id  # Add system_id column
+                data.append(profile)
+            except Exception as e:
+                logger.warning(f"Could not load data for system {system_id}: {str(e)}")
+                continue
+        
+        # Initialize plotter
+        plotter = MultiProfilePlotter(args.output_dir)
+        
+        if data:
+            all_data = pd.concat(data, ignore_index=True)
+            
+            if args.type == 'all':
+                # Create classifications
+                logger.info("Classifying levees...")
+                classifications = classify_levees(all_data, args.summary_dir)
+                
+                # Plot each classification type
+                for plot_type, system_ids in classifications.items():
+                    if not system_ids:
+                        logger.warning(f"No {plot_type} profiles found")
+                        continue
+                        
+                    classified_data = all_data[all_data['system_id'].isin(system_ids)]
+                    
+                    if plot_type == 'significant':
+                        plotter.plot_significant_profiles(classified_data)
+                    elif plot_type == 'non_significant':
+                        plotter.plot_non_significant_profiles(classified_data)
+                        
+                    logger.info(f"Created plots for {len(system_ids)} {plot_type} profiles")
+            else:
+                # Create classification if needed
+                if not os.path.exists(os.path.join(args.summary_dir, f'system_id_{args.type}.csv')):
+                    logger.info("Classifying levees...")
+                    classifications = classify_levees(all_data, args.summary_dir)
+                    system_ids = classifications[args.type]
+                else:
+                    # Load existing classification
+                    classification_file = os.path.join(args.summary_dir, f'system_id_{args.type}.csv')
+                    system_ids = pd.read_csv(classification_file)['system_id'].unique()
+                
+                if not len(system_ids):
+                    logger.error(f"No {args.type} profiles found")
+                    return
+                    
+                classified_data = all_data[all_data['system_id'].isin(system_ids)]
+                
+                if args.type == 'significant':
+                    plotter.plot_significant_profiles(classified_data)
+                elif args.type == 'non_significant':
+                    plotter.plot_non_significant_profiles(classified_data)
+                    
+                logger.info(f"Created plots for {len(system_ids)} {args.type} profiles")
+        else:
+            logger.error("No valid data found to plot")
+            
+    except Exception as e:
+        logger.error(f"Error creating plots: {str(e)}")
+        raise
 
 if __name__ == "__main__":
     main()
