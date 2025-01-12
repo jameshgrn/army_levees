@@ -18,10 +18,11 @@ contextily = "^1.4.0"
 duckdb = "^0.9.2"
 boto3 = "^1.33.2"
 dash = "^2.18.2"
-
+pyarrow = "^18.1.0"
 
 [tool.poetry.group.dev.dependencies]
 ipykernel = "^6.27.1"
+pre-commit = "^3.6.0"
 
 [build-system]
 requires = ["poetry-core"]

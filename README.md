@@ -68,6 +68,26 @@ graph TD
 
 ## Installation
 
+You can install and run this project using either Poetry or UV.
+
+### Using UV (Recommended)
+
+```bash
+# Clone the repository
+git clone <repo>
+cd army_levees
+
+# Install UV if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create virtual environment and install dependencies
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -e .
+```
+
+### Using Poetry (Alternative)
+
 ```bash
 # Clone the repository
 git clone <repo>
@@ -87,10 +107,17 @@ poetry shell
 
 ### Sampling Levee Data
 ```bash
-# Sample random levee systems
+# Using UV:
+python -m army_levees.core.sample_levees -n 10
+
+# Using Poetry:
 poetry run python -m army_levees.core.sample_levees -n 10
 
 # Increase concurrent connections
+# Using UV:
+python -m army_levees.core.sample_levees -n 10 --max_concurrent 4
+
+# Using Poetry:
 poetry run python -m army_levees.core.sample_levees -n 10 --max_concurrent 4
 ```
 
@@ -105,9 +132,22 @@ The sampling process:
 ### Filtering Levee Data
 ```bash
 # Filter with default settings
+# Using UV:
+python -m army_levees.core.filter_levees
+
+# Using Poetry:
 poetry run python -m army_levees.core.filter_levees
 
 # Customize filtering parameters
+# Using UV:
+python -m army_levees.core.filter_levees \
+    --input-dir data/processed \
+    --output-dir data/segments \
+    --zero-threshold 0.01 \
+    --min-points 3 \
+    --max-elev-diff 50.0
+
+# Using Poetry:
 poetry run python -m army_levees.core.filter_levees \
     --input-dir data/processed \
     --output-dir data/segments \
@@ -130,9 +170,17 @@ The filtering process:
 ### Interactive Dashboard
 ```bash
 # Run the dashboard with default settings
+# Using UV:
+python -m army_levees.core.visualize dashboard
+
+# Using Poetry:
 poetry run python -m army_levees.core.visualize dashboard
 
 # Specify custom data directory and port
+# Using UV:
+python -m army_levees.core.visualize dashboard --data-dir custom/data/path --port 8040
+
+# Using Poetry:
 poetry run python -m army_levees.core.visualize dashboard --data-dir custom/data/path --port 8040
 ```
 
@@ -146,28 +194,60 @@ The dashboard provides:
 ### Individual Profile Analysis
 ```bash
 # Plot a single system
+# Using UV:
+python -m army_levees.core.visualize plot 5205000591
+
+# Using Poetry:
 poetry run python -m army_levees.core.visualize plot 5205000591
 
 # Show plot instead of saving
+# Using UV:
+python -m army_levees.core.visualize plot 5205000591 --show
+
+# Using Poetry:
 poetry run python -m army_levees.core.visualize plot 5205000591 --show
 
 # Print diagnostic information
+# Using UV:
+python -m army_levees.core.visualize diagnose 5205000591
+
+# Using Poetry:
 poetry run python -m army_levees.core.visualize diagnose 5205000591
 ```
 
 ### Multi-Profile Analysis
 ```bash
 # Plot all profiles
+# Using UV:
+python -m army_levees.core.visualize multi
+
+# Using Poetry:
 poetry run python -m army_levees.core.visualize multi
 
 # Plot specific profile types
+# Using UV:
+python -m army_levees.core.visualize multi --type significant
+python -m army_levees.core.visualize multi --type non_significant
+
+# Using Poetry:
 poetry run python -m army_levees.core.visualize multi --type significant
 poetry run python -m army_levees.core.visualize multi --type non_significant
 
 # Show plots instead of saving
+# Using UV:
+python -m army_levees.core.visualize multi --type significant --show
+
+# Using Poetry:
 poetry run python -m army_levees.core.visualize multi --type significant --show
 
 # Use raw data and specify directories
+# Using UV:
+python -m army_levees.core.visualize multi --raw-data \
+    --data-dir custom/data \
+    --output-dir custom/output \
+    --summary-dir custom/summary
+
+# Using Poetry:
 poetry run python -m army_levees.core.visualize multi --raw-data \
     --data-dir custom/data \
     --output-dir custom/output \
