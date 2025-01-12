@@ -97,12 +97,12 @@ def get_utm_crs(lon: float, lat: float) -> int:
         return 32700 + zone_number
 
 
-def filter_valid_segments(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Filter out invalid segments from a GeoDataFrame.
-
-    This is a simpler version of the filtering in filter_levees.py,
-    meant for quick visualization cleanup.
-    """
+def filter_valid_segments(
+    gdf: gpd.GeoDataFrame,
+    min_points: int = 10,
+    min_coverage: float = 0.25
+) -> gpd.GeoDataFrame:
+    """Filter a single levee profile."""
     # Remove points with zero/nan elevations
     valid_mask = (
         (gdf['elevation'].notna()) &
