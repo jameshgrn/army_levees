@@ -4,10 +4,11 @@ A Python package for analyzing elevation differences between the National Levee 
 
 ## Overview
 
-This package provides an interactive dashboard and utilities for analyzing USACE levee systems by:
+This package provides tools for analyzing USACE levee systems by:
 1. Visualizing elevation profiles from NLD and 3DEP data
 2. Comparing and analyzing elevation differences
 3. Exploring geographic patterns and trends
+4. Classifying levees based on elevation changes
 
 ## Installation
 
@@ -39,9 +40,10 @@ poetry run python -m army_levees.core.visualize dashboard --data-dir custom/data
 
 The dashboard provides:
 - Interactive map of all levee systems
-- Detailed elevation profiles
+- Detailed elevation profiles with filled difference areas
 - Real-time elevation difference analysis
 - Satellite/street map overlays
+- Color-coded elevation differences
 
 ### Individual Profile Analysis
 ```bash
@@ -110,10 +112,10 @@ army_levees/
 │   └── core/            # Core functionality
 │       └── visualize/   # Visualization modules
 │           ├── __init__.py
-│           ├── dash_app.py    # Interactive dashboard
+│           ├── __main__.py     # CLI entry point
+│           ├── dash_app.py     # Interactive dashboard
 │           ├── multi_profile_plot.py  # Multi-system analysis
-│           ├── utils.py       # Core utilities
-│           └── visualize_levee.py   # CLI interface
+│           └── utils.py        # Core utilities
 ├── data/
 │   ├── processed/       # Raw data
 │   └── segments/        # Filtered data
@@ -129,3 +131,9 @@ Each parquet file in the segments directory contains:
 - `difference`: NLD - 3DEP (meters)
 - `distance_along_track`: Distance along levee (meters)
 - `geometry`: Point geometry (EPSG:4326)
+
+## Classification Criteria
+
+Levees are classified based on their mean elevation differences:
+- **Significant**: Mean change > 0.1m or < -0.1m
+- **Non-significant**: Mean change between -0.1m and 0.1m
