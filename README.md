@@ -43,7 +43,7 @@ graph TD
     F2 -->|Pass| F4{Elevation Diff}
     F3 --> F4
 
-    F4 -->|">50m"| X5[Remove Points]
+    F4 -->|"Diff > 50m"| X5[Remove Points]
     F4 -->|Pass| F5{Min Points?}
 
     F5 -->|"<3 points"| X6[Skip Segment]
