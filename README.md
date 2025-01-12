@@ -31,10 +31,10 @@ poetry shell
 ### Interactive Dashboard
 ```bash
 # Run the dashboard with default settings
-poetry run python -m army_levees.core.visualize
+poetry run python -m army_levees.core.visualize dashboard
 
 # Specify custom data directory and port
-poetry run python -m army_levees.core.visualize --data-dir custom/data/path --port 8040
+poetry run python -m army_levees.core.visualize dashboard --data-dir custom/data/path --port 8040
 ```
 
 The dashboard provides:
@@ -44,41 +44,63 @@ The dashboard provides:
 - Satellite/street map overlays
 
 ### Individual Profile Analysis
-```python
-from army_levees.core.visualize.individual import plot_elevation_profile
-from army_levees.core.visualize.utils import load_system_data
+```bash
+# Plot a single system
+poetry run python -m army_levees.core.visualize plot 5205000591
 
-# Load and visualize a specific system
-data = load_system_data("5205000591")
-if data is not None:
-    plot_elevation_profile(data)
+# Show plot instead of saving
+poetry run python -m army_levees.core.visualize plot 5205000591 --show
+
+# Print diagnostic information
+poetry run python -m army_levees.core.visualize diagnose 5205000591
 ```
 
 ### Multi-Profile Analysis
 ```bash
-# Plot all profile types
-python -m army_levees.core.visualize.multi_profile_plot --type all
+# Plot all profiles
+poetry run python -m army_levees.core.visualize multi
 
 # Plot specific profile types
-python -m army_levees.core.visualize.multi_profile_plot --type degradation
-python -m army_levees.core.visualize.multi_profile_plot --type stable
+poetry run python -m army_levees.core.visualize multi --type significant
+poetry run python -m army_levees.core.visualize multi --type non_significant
 
-# Specify custom directories
-python -m army_levees.core.visualize.multi_profile_plot --type all --data_dir custom/data --output_dir custom/output
+# Show plots instead of saving
+poetry run python -m army_levees.core.visualize multi --type significant --show
+
+# Use raw data and specify directories
+poetry run python -m army_levees.core.visualize multi --raw-data \
+    --data-dir custom/data \
+    --output-dir custom/output \
+    --summary-dir custom/summary
 ```
 
 ## CLI Arguments
 
-### Dashboard (visualize module)
+### Dashboard Command
 - `--data-dir`: Directory containing levee segment data (default: data/segments)
 - `--port`: Port to run the dashboard on (default: 8050)
 - `--debug`: Run in debug mode
 - `--raw`: Use raw data instead of processed data
 
-### Multi-Profile Plot
-- `--type`: Profile type to plot (all, degradation, stable)
-- `--data_dir`: Input data directory
-- `--output_dir`: Output directory for plots
+### Plot Command
+- `system_id`: System ID to plot
+- `--data-dir`: Directory containing levee segment data
+- `--save-dir`: Directory to save plots (default: plots)
+- `--raw`: Use raw data instead of processed data
+- `--show`: Show plot instead of saving
+
+### Diagnose Command
+- `system_id`: System ID to diagnose
+- `--data-dir`: Directory containing levee segment data
+- `--raw`: Use raw data instead of processed data
+
+### Multi-Profile Command
+- `--type`: Profile type to plot (all, significant, non_significant)
+- `--data-dir`: Directory containing filtered segments
+- `--raw-data`: Use raw data from data/processed
+- `--output-dir`: Directory to save plots (default: plots/profiles)
+- `--summary-dir`: Directory containing classification CSV files
+- `--show`: Show plots instead of saving them
 
 ## Project Structure
 
@@ -89,13 +111,13 @@ army_levees/
 │       └── visualize/   # Visualization modules
 │           ├── __init__.py
 │           ├── dash_app.py    # Interactive dashboard
-│           ├── individual.py  # Individual system plots
 │           ├── multi_profile_plot.py  # Multi-system analysis
-│           └── utils.py       # Shared utilities
+│           ├── utils.py       # Core utilities
+│           └── visualize_levee.py   # CLI interface
 ├── data/
-│   └── segments/        # Processed segment files
-├── plots/              # Generated plots
-└── pyproject.toml      # Poetry configuration
+│   ├── processed/       # Raw data
+│   └── segments/        # Filtered data
+└── plots/              # Generated plots
 ```
 
 ## Data Format

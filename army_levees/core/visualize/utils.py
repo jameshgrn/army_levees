@@ -2,8 +2,31 @@
 
 from pathlib import Path
 import geopandas as gpd
-from typing import Optional, List, Set
+from typing import Optional, List, Set, cast, Dict
 import pandas as pd
+import matplotlib.pyplot as plt
+
+
+def get_segment_files(data_dir: str | Path) -> Dict[str, List[Path]]:
+    """Get all segment files grouped by system ID.
+
+    Args:
+        data_dir: Directory containing segment files
+
+    Returns:
+        Dictionary mapping system IDs to lists of segment file paths
+    """
+    data_dir = Path(data_dir)
+    segments: Dict[str, List[Path]] = {}
+
+    # Group segment files by system ID
+    for file in sorted(data_dir.glob("levee_*_segment_*.parquet")):
+        system_id = file.stem.split("_segment_")[0].replace("levee_", "")
+        if system_id not in segments:
+            segments[system_id] = []
+        segments[system_id].append(file)
+
+    return segments
 
 
 def get_processed_systems(data_dir: str | Path = "data/segments") -> Set[str]:
@@ -88,4 +111,103 @@ def filter_valid_segments(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
         (gdf['dep_elevation'] != 0)
     )
 
-    return gdf[valid_mask].copy()
+    # Use boolean indexing and cast result to GeoDataFrame
+    filtered = gdf[valid_mask]
+    return cast(gpd.GeoDataFrame, filtered)
+
+
+def plot_elevation_profile(
+    system_id: str,
+    save_dir: str | Path = "plots",
+    data_dir: str | Path = "data/segments",
+    raw_data: bool = False,
+    show: bool = False
+) -> None:
+    """Plot elevation profile for a levee system."""
+    data = load_system_data(system_id, data_dir=data_dir, raw_data=raw_data)
+    if data is None:
+        print(f"No data found for system {system_id}")
+        return
+
+    # Create figure with exact size
+    fig = plt.figure(figsize=(15, 9), constrained_layout=True)
+    ax = fig.add_subplot(111)
+
+    # Plot full profile
+    profile: gpd.GeoDataFrame = data
+    ax.plot(
+        profile['distance_along_track'],
+        profile['elevation'],
+        'b-',
+        label='NLD',
+        alpha=0.8
+    )
+    ax.plot(
+        profile['distance_along_track'],
+        profile['dep_elevation'],
+        'r-',
+        label='3DEP',
+        alpha=0.8
+    )
+    # Add points
+    ax.scatter(
+        profile['distance_along_track'],
+        profile['elevation'],
+        c='blue',
+        s=20,
+        alpha=0.5
+    )
+    ax.scatter(
+        profile['distance_along_track'],
+        profile['dep_elevation'],
+        c='red',
+        s=20,
+        alpha=0.5
+    )
+
+    # Customize plot
+    ax.set_title(f"System ID: {system_id}")
+    ax.set_xlabel("Distance Along Track (m)")
+    ax.set_ylabel("Elevation (m)")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+
+    # Save plot
+    save_path = Path(save_dir) / f"system_{system_id}.png"
+    if show:
+        plt.show()
+    else:
+        plt.savefig(save_path, dpi=300)
+        plt.close()
+
+
+def diagnose_elevation_differences(
+    system_id: str,
+    data_dir: str | Path = "data/segments",
+    raw_data: bool = False
+) -> None:
+    """Print diagnostic information about elevation differences."""
+    data = load_system_data(system_id, data_dir=data_dir, raw_data=raw_data)
+    if data is None:
+        print(f"No data found for system {system_id}")
+        return
+
+    # Analyze full profile
+    profile: gpd.GeoDataFrame = data
+    _print_segment_stats(profile)
+
+
+def _print_segment_stats(gdf: gpd.GeoDataFrame) -> None:
+    """Print statistics for a segment."""
+    diff = gdf['elevation'] - gdf['dep_elevation']
+
+    print(f"Points: {len(gdf)}")
+    print(f"Length: {gdf['distance_along_track'].max():.1f}m")
+    print("\nElevation ranges:")
+    print(f"  NLD:  {gdf['elevation'].min():.1f}m to {gdf['elevation'].max():.1f}m")
+    print(f"  3DEP: {gdf['dep_elevation'].min():.1f}m to {gdf['dep_elevation'].max():.1f}m")
+    print("\nDifferences (NLD - 3DEP):")
+    print(f"  Mean: {diff.mean():.1f}m")
+    print(f"  Std:  {diff.std():.1f}m")
+    print(f"  Min:  {diff.min():.1f}m")
+    print(f"  Max:  {diff.max():.1f}m")

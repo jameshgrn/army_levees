@@ -14,13 +14,14 @@ from matplotlib.colors import Normalize, to_hex, SymLogNorm
 import matplotlib.pyplot as plt
 from matplotlib.cm import ScalarMappable
 
-from .interactive import get_segment_files
+from .utils import get_segment_files
 
-def get_color_scale(values: np.ndarray) -> Tuple[List[str], List[float]]:
+def get_color_scale(values: np.ndarray, force_symmetric: bool = True) -> Tuple[List[str], List[float]]:
     """Create a diverging color scale for elevation differences using symmetric log normalization.
 
     Args:
         values: Array of values to create color scale for
+        force_symmetric: Whether to force the color scale to be symmetric around 0
 
     Returns:
         Tuple of (colors, values) for plotly color scale
@@ -28,22 +29,21 @@ def get_color_scale(values: np.ndarray) -> Tuple[List[str], List[float]]:
     # Find max absolute value for scaling
     vmax = max(abs(values.min()), abs(values.max()))
 
-    # Use symmetric log normalization
-    # Linear scaling near zero (within ±1m), log scaling beyond that
-    norm = SymLogNorm(linthresh=1.0, linscale=1.0, vmin=-vmax, vmax=vmax)
+    # Create evenly spaced values with 0 in the middle
+    if force_symmetric:
+        # Create symmetric scale around 0
+        scale_values = np.array([-vmax, -vmax/2, 0, vmax/2, vmax])
+    else:
+        scale_values = np.linspace(-vmax, vmax, 11)  # Use odd number to include 0
 
     # Get RdYlBu colormap
     cmap = plt.get_cmap('RdYlBu')
 
-    # Create color scale with more points near zero for better resolution
-    # Use a combination of linear and log spacing
-    linear_values = np.linspace(-1, 1, 5)  # More points in linear region
-    pos_log_values = np.logspace(0, np.log10(vmax), 4)[1:]  # Log spacing for positives
-    neg_log_values = -np.logspace(0, np.log10(vmax), 4)[1:][::-1]  # Log spacing for negatives
-    scale_values = np.concatenate([neg_log_values, linear_values, pos_log_values])
+    # Create normalized positions (0 to 1)
+    positions = (scale_values - scale_values.min()) / (scale_values.max() - scale_values.min())
 
     # Get colors
-    colors = [to_hex(tuple(cmap(norm(v)))) for v in scale_values]
+    colors = [to_hex(cmap(pos)) for pos in positions]
 
     # Convert to plotly format
     return colors, scale_values.tolist()
@@ -307,8 +307,8 @@ class LeveeDashboard:
                 )
                 hover_texts.append(hover_text)
 
-        # Create color scale
-        colors, values = get_color_scale(np.array(mean_diffs))
+        # Create color scale with forced symmetry
+        colors, values = get_color_scale(np.array(mean_diffs), force_symmetric=True)
         colorscale = [[i/(len(colors)-1), color] for i, color in enumerate(colors)]
 
         fig = go.Figure(
@@ -320,12 +320,20 @@ class LeveeDashboard:
                     color=mean_diffs,
                     colorscale=colorscale,
                     size=8,
+                    cmin=-max(abs(min(mean_diffs)), abs(max(mean_diffs))),  # Force symmetric range
+                    cmid=0,  # Force 0 to map to center color
+                    cmax=max(abs(min(mean_diffs)), abs(max(mean_diffs))),
                     colorbar=dict(
                         title="Mean Elevation<br>Difference (m)",
                         titleside="right",
                         tickmode="array",
-                        ticktext=[f"{v:.1f}" for v in values],
+                        ticktext=[f"{v:+.1f}m" for v in values],
                         tickvals=values,
+                        ticks="outside",
+                        ticklen=5,
+                        thickness=15,
+                        len=0.9,
+                        tickfont=dict(size=10),
                     ),
                 ),
                 text=hover_texts,
@@ -405,8 +413,8 @@ class LeveeDashboard:
         # Increased base zoom level for much closer default view
         zoom = max(14, min(20, int(-0.5 * np.log2(max_range))))  # Changed min to 14 and coefficient to -0.5
 
-        # Create color scale and add traces
-        colors, values = get_color_scale(np.array(all_diffs))
+        # Create color scale with forced symmetry
+        colors, values = get_color_scale(np.array(all_diffs), force_symmetric=True)
         colorscale = [[i/(len(colors)-1), color] for i, color in enumerate(colors)]
 
         # Add segment traces
@@ -457,14 +465,22 @@ class LeveeDashboard:
                         color=diffs,
                         colorscale=colorscale,
                         size=8,
+                        cmin=-max(abs(min(all_diffs)), abs(max(all_diffs))),  # Force symmetric range
+                        cmid=0,  # Force 0 to map to center color
+                        cmax=max(abs(min(all_diffs)), abs(max(all_diffs))),
                         colorbar=dict(
                             title="Elevation<br>Difference (m)",
                             titleside="right",
                             tickmode="array",
-                            ticktext=[f"{v:.1f}" for v in values],
+                            ticktext=[f"{v:+.1f}m" for v in values],
                             tickvals=values,
+                            ticks="outside",
+                            ticklen=5,
+                            thickness=15,
+                            len=0.9,
+                            tickfont=dict(size=10),
                         ),
-                        showscale=i==0,  # Only show colorbar for first segment
+                        showscale=i==0,
                     ),
                     name=f"Segment {i+1}",
                     text=hover_text,
