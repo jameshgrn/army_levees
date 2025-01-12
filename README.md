@@ -5,10 +5,66 @@ A Python package for analyzing elevation differences between the National Levee 
 ## Overview
 
 This package provides tools for analyzing USACE levee systems by:
-1. Visualizing elevation profiles from NLD and 3DEP data
-2. Comparing and analyzing elevation differences
-3. Exploring geographic patterns and trends
-4. Classifying levees based on elevation changes
+1. Sampling levee data from NLD and 3DEP sources
+2. Filtering and validating elevation profiles
+3. Visualizing elevation profiles and differences
+4. Comparing and analyzing elevation differences
+5. Exploring geographic patterns and trends
+6. Classifying levees based on elevation changes
+
+## Data Pipeline
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'fontFamily': 'arial', 'fontSize': '12px', 'primaryTextColor': '#000000' }}}%%
+graph TD
+    %% Data Sources & Initial Validation
+    A[NLD API] --> |Get Routes| V1{Floodwall Check}
+    V1 -->|Has Floodwall| X1[Skip System]
+    V1 -->|Pass| B1[Profile Data]
+
+    C[3DEP API] --> |Coverage Check| V2{1m Resolution?}
+    V2 -->|No| X2[Skip System]
+    V2 -->|Yes| B2[Elevation Data]
+
+    %% Raw Data Processing
+    B1 --> B3[Raw Profile]
+    B2 --> B3
+    B3 --> |Save| B4[processed/*.parquet]
+
+    %% Filtering Pipeline
+    B4 --> F0{Zero Check}
+    F0 -->|"<0.01m"| X3[Remove Points]
+    F0 -->|Pass| F1{Valid Range?}
+
+    F1 -->|"[-100m, 5000m]"| F2{Unit Check}
+    F1 -->|Outside| X4[Remove Points]
+
+    F2 -->|"Ratio ≈ 3.28"| F3[Convert to Meters]
+    F2 -->|Pass| F4{Elevation Diff}
+    F3 --> F4
+
+    F4 -->|">50m"| X5[Remove Points]
+    F4 -->|Pass| F5{Min Points?}
+
+    F5 -->|"<3 points"| X6[Skip Segment]
+    F5 -->|Pass| F6[Split Segments]
+
+    F6 --> |Save| D[segments/*.parquet]
+
+    %% Visualization
+    D --> V[Visualization]
+
+    %% Styling
+    classDef process fill:#f2f2f2,stroke:#333,color:#000
+    classDef validation fill:#ffe6e6,stroke:#333,color:#000
+    classDef data fill:#e6ffee,stroke:#333,color:#000
+    classDef skip fill:#ffcccc,stroke:#333,color:#000
+
+    class A,C process
+    class V1,V2,F0,F1,F2,F4,F5 validation
+    class B1,B2,B3,B4,D data
+    class X1,X2,X3,X4,X5,X6 skip
+```
 
 ## Installation
 
@@ -28,6 +84,48 @@ poetry shell
 ```
 
 ## Usage
+
+### Sampling Levee Data
+```bash
+# Sample random levee systems
+poetry run python -m army_levees.core.sample_levees -n 10
+
+# Increase concurrent connections
+poetry run python -m army_levees.core.sample_levees -n 10 --max_concurrent 4
+```
+
+The sampling process:
+- Checks for 1m 3DEP coverage
+- Downloads NLD profile data
+- Retrieves corresponding 3DEP elevations
+- Saves raw data to data/processed directory
+- Handles unit conversions automatically
+- Skips systems with significant floodwalls
+
+### Filtering Levee Data
+```bash
+# Filter with default settings
+poetry run python -m army_levees.core.filter_levees
+
+# Customize filtering parameters
+poetry run python -m army_levees.core.filter_levees \
+    --input-dir data/processed \
+    --output-dir data/segments \
+    --zero-threshold 0.01 \
+    --min-points 3 \
+    --max-elev-diff 50.0
+```
+
+The filtering process:
+- Removes invalid elevation values
+- Handles feet-to-meters conversions
+- Splits profiles into valid segments
+- Applies quality control checks:
+  - Minimum number of points
+  - Maximum elevation differences
+  - Valid elevation ranges
+  - Coverage requirements
+- Saves filtered segments to data/segments directory
 
 ### Interactive Dashboard
 ```bash
@@ -78,6 +176,17 @@ poetry run python -m army_levees.core.visualize multi --raw-data \
 
 ## CLI Arguments
 
+### Sampling Command
+- `-n, --n_samples`: Number of systems to sample (default: 10)
+- `--max_concurrent`: Maximum concurrent connections (default: 1)
+
+### Filtering Command
+- `--input-dir`: Directory containing raw parquet files (default: data/processed)
+- `--output-dir`: Directory to save filtered files (default: data/segments)
+- `--zero-threshold`: Threshold for considering elevation as zero (default: 0.01)
+- `--min-points`: Minimum points required per segment (default: 3)
+- `--max-elev-diff`: Maximum allowed elevation difference (default: 50.0)
+
 ### Dashboard Command
 - `--data-dir`: Directory containing levee segment data (default: data/segments)
 - `--port`: Port to run the dashboard on (default: 8050)
@@ -109,6 +218,8 @@ poetry run python -m army_levees.core.visualize multi --raw-data \
 ```
 army_levees/
 ├── army_levees/          # Main package
+│   ├── sample_levees.py   # Data sampling
+│   ├── filter_levees.py   # Data filtering
 │   └── core/            # Core functionality
 │       └── visualize/   # Visualization modules
 │           ├── __init__.py
@@ -117,14 +228,24 @@ army_levees/
 │           ├── multi_profile_plot.py  # Multi-system analysis
 │           └── utils.py        # Core utilities
 ├── data/
-│   ├── processed/       # Raw data
-│   └── segments/        # Filtered data
+│   ├── processed/       # Raw sampled data
+│   └── segments/        # Filtered segments
 └── plots/              # Generated plots
 ```
 
 ## Data Format
 
-Each parquet file in the segments directory contains:
+### Raw Data (data/processed/)
+Each parquet file contains:
+- `system_id`: USACE system ID
+- `elevation`: NLD elevation (meters)
+- `dep_elevation`: 3DEP elevation (meters)
+- `dep_max_elevation`: Maximum 3DEP elevation in buffer (meters)
+- `distance_along_track`: Distance along levee (meters)
+- `geometry`: Point geometry (EPSG:3857)
+
+### Filtered Segments (data/segments/)
+Each parquet file contains:
 - `system_id`: USACE system ID
 - `elevation`: NLD elevation (meters)
 - `dep_elevation`: 3DEP elevation (meters)
