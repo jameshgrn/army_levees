@@ -198,9 +198,15 @@ class LeveeDashboard:
         """Create elevation profile plot."""
         segments = self.data_cache[system_id]
 
+        # Define dash patterns for different segments
+        dash_patterns = ['solid', 'dash', 'dot', 'dashdot', 'longdash', 'longdashdot']
+
         fig = go.Figure()
 
         for i, segment in enumerate(segments):
+            # Get dash pattern (cycle through patterns if more segments than patterns)
+            dash = dash_patterns[i % len(dash_patterns)]
+
             # Add NLD elevation
             fig.add_trace(
                 go.Scatter(
@@ -208,7 +214,12 @@ class LeveeDashboard:
                     y=segment["elevation"],
                     mode="lines+markers",
                     name=f"NLD Elevation (Segment {i+1})",
-                    line=dict(color="blue"),
+                    line=dict(
+                        color="blue",
+                        dash=dash,
+                        width=2,
+                    ),
+                    marker=dict(size=4),  # Smaller markers to reduce clutter
                     showlegend=True,
                     hovertemplate=(
                         "Segment %d<br>" % (i + 1)
@@ -219,14 +230,21 @@ class LeveeDashboard:
                 )
             )
 
-            # Add 3DEP elevation
+            # Add filled area between lines
             fig.add_trace(
                 go.Scatter(
                     x=segment["distance_along_track"],
                     y=segment["dep_elevation"],
                     mode="lines+markers",
                     name=f"3DEP Elevation (Segment {i+1})",
-                    line=dict(color="red"),
+                    line=dict(
+                        color="red",
+                        dash=dash,
+                        width=2,
+                    ),
+                    marker=dict(size=4),  # Smaller markers to reduce clutter
+                    fill='tonexty',  # Fill to previous trace
+                    fillcolor='rgba(128, 128, 128, 0.2)',  # Light gray with 0.2 opacity
                     showlegend=True,
                     hovertemplate=(
                         "Segment %d<br>" % (i + 1)

@@ -135,20 +135,35 @@ def plot_elevation_profile(
 
     # Plot full profile
     profile: gpd.GeoDataFrame = data
+
+    # Plot filled area between lines
+    ax.fill_between(
+        profile['distance_along_track'],
+        profile['elevation'],
+        profile['dep_elevation'],
+        color='gray',
+        alpha=0.2,
+        label='Difference'
+    )
+
+    # Plot lines on top of fill
     ax.plot(
         profile['distance_along_track'],
         profile['elevation'],
         'b-',
         label='NLD',
-        alpha=0.8
+        alpha=0.8,
+        linewidth=2
     )
     ax.plot(
         profile['distance_along_track'],
         profile['dep_elevation'],
         'r-',
         label='3DEP',
-        alpha=0.8
+        alpha=0.8,
+        linewidth=2
     )
+
     # Add points
     ax.scatter(
         profile['distance_along_track'],
