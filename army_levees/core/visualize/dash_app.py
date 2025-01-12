@@ -522,7 +522,11 @@ class LeveeDashboard:
             # Create all plots with explicit updates
             elevation_profile = self._create_elevation_profile(system_id)
             system_detail = self._create_system_detail(system_id, detail_style)
-            system_detail['layout']['mapbox']['uirevision'] = None
+
+            # Update uirevision directly in the layout
+            if isinstance(system_detail, go.Figure):
+                system_detail.update_layout(mapbox_uirevision=None)
+
             overview_map = self._create_overview_map(overview_style)
 
             # Return all updates
