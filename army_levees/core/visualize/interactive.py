@@ -132,6 +132,7 @@ class InteractiveDashboard:
             ),
             mapbox=dict(style="open-street-map", zoom=3),
             mapbox2=dict(style="open-street-map", zoom=10),
+            clickmode='event+select',
         )
 
         return fig
@@ -261,6 +262,7 @@ class InteractiveDashboard:
                     name="All Systems",
                     text=hover_texts,
                     hoverinfo="text",
+                    customdata=[[system_id] for system_id in self.system_ids],
                     showlegend=True,
                 ),
                 row=2,
@@ -345,8 +347,35 @@ class InteractiveDashboard:
         self.fig.show()
 
     def save(self, save_path: str | Path):
-        """Save the dashboard to HTML file."""
-        self.fig.write_html(str(save_path))
+        """Save the dashboard to HTML file with click functionality."""
+        # Add JavaScript callback for click events
+        self.fig.write_html(
+            str(save_path),
+            config={'responsive': True},
+            full_html=True,
+            include_plotlyjs=True,
+            post_script="""
+            <script>
+                var plot = document.getElementsByClassName('plotly-graph-div')[0];
+                plot.on('plotly_click', function(data) {
+                    if (data.points.length > 0 && data.points[0].customdata) {
+                        var system_id = data.points[0].customdata[0];
+                        // Update all plots with new system
+                        Plotly.react(plot, updateSystem(system_id));
+                    }
+                });
+
+                function updateSystem(system_id) {
+                    // Make AJAX request to get new system data
+                    fetch(`/update_system/${system_id}`)
+                        .then(response => response.json())
+                        .then(newFigure => {
+                            Plotly.react(plot, newFigure.data, newFigure.layout);
+                        });
+                }
+            </script>
+            """
+        )
 
 
 def create_interactive_dashboard(
@@ -382,3 +411,17 @@ def create_interactive_dashboard(
     except Exception as e:
         print(f"Error creating dashboard: {e}")
         return None
+
+
+from flask import Flask, jsonify
+
+app = Flask(__name__)
+
+@app.route('/update_system/<system_id>')
+def update_system(system_id):
+    dashboard = InteractiveDashboard()  # You'll need to handle state management
+    dashboard.update_system(system_id)
+    return jsonify({
+        'data': dashboard.fig.data,
+        'layout': dashboard.fig.layout
+    })
