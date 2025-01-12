@@ -8,8 +8,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from .interactive import create_summary_map
-from .summary import analyze_large_differences, investigate_problematic_systems
+from .interactive import create_interactive_dashboard
 from .utils import get_processed_systems
 
 logger = logging.getLogger(__name__)
@@ -41,13 +40,18 @@ def main():
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path("data/filtered"),
-        help="Directory containing levee data (default: data/filtered)",
+        default=Path("data/segments"),
+        help="Directory containing levee data (default: data/segments)",
     )
     parser.add_argument(
         "--raw-data",
         action="store_true",
         help="Use raw data from data/processed instead of filtered data",
+    )
+    parser.add_argument(
+        "--show",
+        action="store_true",
+        help="Show the interactive dashboard in browser",
     )
 
     args = parser.parse_args()
@@ -62,19 +66,20 @@ def main():
     systems = get_processed_systems()
     logger.info(f"Found {len(systems)} processed levee systems")
 
-    # Run analysis pipeline
-    logger.info("\n1. Analyzing elevation differences...")
-    large_diffs = analyze_large_differences(threshold=args.threshold)
-
-    logger.info("\n2. Investigating problematic systems...")
-    investigate_problematic_systems(n_systems=args.systems)
-
-    logger.info("\n3. Creating interactive summary map...")
-    summary_map = create_summary_map(
-        save_path=args.output_dir / "levee_summary_map.html"
+    # Create interactive dashboard
+    logger.info("\nCreating interactive dashboard...")
+    dashboard = create_interactive_dashboard(
+        save_path=args.output_dir / "levee_dashboard.html",
+        data_dir=data_dir,
+        raw_data=args.raw_data,
+        show=args.show,
     )
-    if summary_map:
-        logger.info(f"Saved summary map to {args.output_dir}/levee_summary_map.html")
+    if dashboard:
+        logger.info(
+            f"Saved interactive dashboard to {args.output_dir}/levee_dashboard.html"
+        )
+        if args.show:
+            logger.info("Opening dashboard in browser...")
 
     logger.info("\nVisualization complete! Check the plots directory for results.")
 

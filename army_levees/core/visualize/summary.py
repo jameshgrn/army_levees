@@ -1,93 +1,77 @@
-"""Functions for creating summary visualizations of levee data."""
+"""Summary visualization functions for levee data."""
+
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from pathlib import Path
-from typing import List, Dict, Any
-import geopandas as gpd
-from tqdm import tqdm
-
-from .utils import load_system_data, get_processed_systems
+import pandas as pd
 
 
-def plot_summary(
-    save_dir: str | Path = "plots",
-    data_dir: str | Path = "data/segments",
-    raw_data: bool = False
-) -> None:
-    """Create summary plots for all processed levees."""
-    
-    # Get all system IDs
-    system_ids = get_processed_systems(data_dir=data_dir)
-        
-    if not system_ids:
-        print("No levee data found")
-        return
-        
-    # Collect statistics
-    stats: Dict[str, List[float]] = {
-        "mean_diff": [],
-        "std_diff": [],
-        "max_diff": [],
-        "min_diff": [],
-        "length": []
-    }
-    
-    # Process each system
-    for system_id in tqdm(system_ids, desc="Processing systems"):
-        data = load_system_data(system_id, data_dir=data_dir, raw_data=raw_data)
-        if data is None:
-            continue
-            
-        # Process full profile
-        profile: gpd.GeoDataFrame = data
-        _collect_segment_stats(profile, stats)
-    
-    # Create plots
-    _create_summary_plots(stats, save_dir)
+def plot_elevation_differences(segments: list, save_dir: Path) -> None:
+    """Plot histogram of elevation differences between NLD and 3DEP."""
+    diffs = []
+    ratios = []  # Track ratios to identify potential unit conversion issues
+    for segment in segments:
+        segment_diffs = segment.elevation - segment.dep_elevation
+        diffs.extend(segment_diffs)
 
+        # Calculate ratios where both elevations are non-zero
+        mask = (segment.elevation != 0) & (segment.dep_elevation != 0)
+        if mask.any():
+            segment_ratios = segment.elevation[mask] / segment.dep_elevation[mask]
+            ratios.extend(segment_ratios)
 
-def _collect_segment_stats(gdf: gpd.GeoDataFrame, stats: Dict[str, List[float]]) -> None:
-    """Collect statistics from a segment."""
-    diff = gdf['elevation'] - gdf['dep_elevation']
-    
-    stats["mean_diff"].append(diff.mean())
-    stats["std_diff"].append(diff.std())
-    stats["max_diff"].append(diff.max())
-    stats["min_diff"].append(diff.min())
-    stats["length"].append(gdf['distance_along_track'].max())
+    # Create figure with two subplots
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
 
+    # Plot difference histogram
+    ax1.hist(diffs, bins=50)
+    ax1.set_xlabel("Elevation Difference (m)")
+    ax1.set_ylabel("Count")
+    ax1.set_title("Distribution of NLD vs 3DEP Elevation Differences")
+    ax1.grid(True, alpha=0.3)
 
-def _create_summary_plots(stats: Dict[str, List[float]], save_dir: Path | str) -> None:
-    """Create and save summary plots."""
-    save_dir = Path(save_dir)
-    
-    # Elevation difference histogram
-    plt.figure(figsize=(10, 6))
-    plt.hist(stats["mean_diff"], bins=50, alpha=0.7)
-    plt.xlabel("Mean Elevation Difference (m)")
-    plt.ylabel("Count")
-    plt.title("Distribution of Mean Elevation Differences")
-    plt.grid(True, alpha=0.3)
-    plt.savefig(save_dir / "mean_differences_hist.png", dpi=300, bbox_inches='tight')
+    # Plot ratio histogram
+    ax2.hist(ratios, bins=50)
+    ax2.set_xlabel("NLD/3DEP Ratio")
+    ax2.set_ylabel("Count")
+    ax2.set_title("Distribution of NLD/3DEP Ratios")
+    ax2.grid(True, alpha=0.3)
+
+    # Add vertical line at ratio=3.28084 (feet to meters conversion)
+    ax2.axvline(
+        x=3.28084, color="r", linestyle="--", label="Feet to Meters Ratio (3.28084)"
+    )
+    ax2.legend()
+
+    plt.tight_layout()
+    plt.savefig(save_dir / "elevation_differences.png")
     plt.close()
-    
-    # Standard deviation vs mean difference
+
+
+def plot_segment_lengths(segments: list, save_dir: Path) -> None:
+    """Plot histogram of segment lengths."""
+    lengths = [segment.distance_along_track.max() for segment in segments]
+
     plt.figure(figsize=(10, 6))
-    plt.scatter(stats["mean_diff"], stats["std_diff"], alpha=0.5)
-    plt.xlabel("Mean Difference (m)")
-    plt.ylabel("Standard Deviation (m)")
-    plt.title("Standard Deviation vs Mean Difference")
-    plt.grid(True, alpha=0.3)
-    plt.savefig(save_dir / "std_vs_mean.png", dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    # Length histogram
-    plt.figure(figsize=(10, 6))
-    plt.hist(stats["length"], bins=50, alpha=0.7)
-    plt.xlabel("Length (m)")
+    plt.hist(lengths, bins=50)
+    plt.xlabel("Segment Length (m)")
     plt.ylabel("Count")
-    plt.title("Distribution of Profile Lengths")
+    plt.title("Distribution of Segment Lengths")
     plt.grid(True, alpha=0.3)
-    plt.savefig(save_dir / "length_hist.png", dpi=300, bbox_inches='tight')
+    plt.savefig(save_dir / "segment_lengths.png")
+    plt.close()
+
+
+def plot_point_counts(segments: list, save_dir: Path) -> None:
+    """Plot histogram of points per segment."""
+    counts = [len(segment) for segment in segments]
+
+    plt.figure(figsize=(10, 6))
+    plt.hist(counts, bins=50)
+    plt.xlabel("Points per Segment")
+    plt.ylabel("Count")
+    plt.title("Distribution of Points per Segment")
+    plt.grid(True, alpha=0.3)
+    plt.savefig(save_dir / "point_counts.png")
     plt.close()
