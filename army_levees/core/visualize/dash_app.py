@@ -96,8 +96,34 @@ class LeveeDashboard:
 
     def _create_layout(self):
         """Create the Dash app layout."""
+        # Create initial NLD link for the first system
+        initial_system = self.system_ids[0]
+        initial_url = f"https://levees.sec.usace.army.mil/levees/{initial_system}"
+        initial_text = f"🔗 View System {initial_system} in National Levee Database ➜"
+
         return html.Div([
             html.H1("Levee System Dashboard", style={'textAlign': 'center'}),
+
+            # Add NLD link container with improved styling
+            html.Div([
+                html.A(
+                    id='nld-link',
+                    href=initial_url,
+                    children=initial_text,
+                    target='_blank',  # Open in new tab
+                    style={
+                        'textAlign': 'center',
+                        'display': 'inline-block',
+                        'fontSize': '12px',
+                        'color': '#666',  # Subtle gray
+                        'textDecoration': 'none',
+                        'padding': '2px 8px',
+                        'margin': '0',
+                        'fontWeight': '400',
+                        'opacity': '0.8',
+                    }
+                ),
+            ], style={'textAlign': 'center', 'margin': '0', 'height': '20px'}),
 
             # Top row - Elevation Profile
             html.Div([
@@ -256,7 +282,12 @@ class LeveeDashboard:
             )
 
         fig.update_layout(
-            title=f"Elevation Profile - System {system_id}",
+            title=dict(
+                text=f"Elevation Profile - System {system_id}",
+                xref="paper",
+                x=0.5,
+                font=dict(size=16),
+            ),
             xaxis_title="Distance Along Track (m)",
             yaxis_title="Elevation (m)",
             showlegend=True,
@@ -508,7 +539,12 @@ class LeveeDashboard:
 
         # Update layout with modified mapbox configuration
         fig.update_layout(
-            title=f"System Detail - {system_id}",
+            title=dict(
+                text=f"System Detail - {system_id}",
+                xref="paper",
+                x=0.5,
+                font=dict(size=16),
+            ),
             mapbox=dict(
                 **self._get_base_map_layout(base_map_style),
                 center=dict(
@@ -532,7 +568,9 @@ class LeveeDashboard:
                 Output('current-system-id', 'data'),
                 Output('elevation-profile', 'figure'),
                 Output('system-detail', 'figure'),
-                Output('overview-map', 'figure')
+                Output('overview-map', 'figure'),
+                Output('nld-link', 'href'),
+                Output('nld-link', 'children'),
             ],
             [
                 Input('overview-map', 'clickData'),
@@ -563,16 +601,30 @@ class LeveeDashboard:
 
             overview_map = self._create_overview_map(overview_style)
 
+            # Create NLD link and text with arrow symbol
+            nld_url = f"https://levees.sec.usace.army.mil/levees/{system_id}"
+            nld_text = f"🔗 View System {system_id} in National Levee Database ➜"
+
             # Return all updates
             return (
                 system_id,
                 elevation_profile,
                 system_detail,
-                overview_map
+                overview_map,
+                nld_url,
+                nld_text
             )
 
-    def run_server(self, debug: bool = True, port: int = 8040):
-        """Run the Dash server."""
+    def run_server(self, debug: bool = True, port: int = 8050):
+        """Run the Dash server.
+
+        Args:
+            debug: Whether to run in debug mode
+            port: Port to run the server on, defaults to 8050 to match Dash's default
+        """
+        import webbrowser
+        url = f"http://127.0.0.1:{port}"
+        webbrowser.open(url)
         self.app.run_server(debug=debug, port=port)
 
 
@@ -580,7 +632,7 @@ def create_dash_app(
     data_dir: str | Path = "data/segments",
     raw_data: bool = False,
     debug: bool = True,
-    port: int = 8040,
+    port: int = 8050,
 ) -> LeveeDashboard:
     """Create and run the Dash app.
 
@@ -588,7 +640,7 @@ def create_dash_app(
         data_dir: Directory containing levee data
         raw_data: Whether to use raw data
         debug: Whether to run in debug mode
-        port: Port to run the server on
+        port: Port to run the server on, defaults to 8050 to match Dash's default
 
     Returns:
         The LeveeDashboard instance

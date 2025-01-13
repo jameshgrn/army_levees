@@ -871,11 +871,12 @@ def log_progress_summary(stats: ProcessingStats) -> None:
         f"  Success Rate: {stats.success_rate:.1%}\n"
         f"  Systems Processed: {stats.success}/{stats.total_attempts}\n"
         f"  Failures:\n"
-        f"    Timeouts: {stats.timeouts}\n"
         f"    Floodwalls: {stats.floodwalls}\n"
         f"    No Data: {stats.no_data}\n"
-        f"    Coverage Issues: {stats.coverage_issues}\n"
-        f"    Invalid Data: {stats.invalid_data}\n"
+        f"    Invalid Data:\n"
+        f"      All zeros: {stats.all_zeros}\n"
+        f"      All NaNs: {stats.all_nans}\n"
+        f"      Too few points: {stats.too_few_points}\n"
     )
 
 
