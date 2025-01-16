@@ -2,15 +2,6 @@
 
 A Python package for analyzing elevation differences between the National Levee Database (NLD) and USGS 3DEP data.
 
-**🚨 DOUG! USE THIS COMMAND TO COPY THE LEVEE DATA FROM JAKE'S EXTERNAL DRIVE! 🚨**
-
-```bash
-# Copy segments data from external drive to local project
-mkdir -p data/segments && \
-cp -rv "/Volumes/My Passport/segments/"* "data/segments/" && \
-echo "✅ Levee data copied successfully to data/segments/"
-```
-
 ## Overview
 
 This package provides tools for analyzing USACE levee systems by:
