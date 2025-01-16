@@ -2,97 +2,100 @@
 
 A Python package for analyzing elevation differences between the National Levee Database (NLD) and USGS 3DEP data.
 
-## Overview
+**🚨 DOUG! USE THIS COMMAND TO COPY THE LEVEE DATA FROM JAKE'S EXTERNAL DRIVE! 🚨**
 
-This package helps collect and analyze elevation data for USACE levee systems by:
-1. Getting profile data from the NLD API
-2. Getting matching elevations from USGS 3DEP
-3. Comparing and visualizing the differences
-4. Analyzing geomorphic changes and patterns
-
-## System Architecture
-
-```mermaid
-graph TD
-    subgraph Data_Collection
-        A[USACE System IDs] -->|get_usace_system_ids| B[Random Sample Selection]
-        B -->|get_random_levees_async| C[Async Processing]
-        C -->|get_nld_profile_async| D[NLD Profile Data]
-        C -->|get_3dep_elevations_async| E[3DEP Elevation Data]
-    end
-
-    subgraph Data_Processing
-        D --> F[Create GeoDataFrame]
-        E --> F
-        F --> G[Valid Segments]
-        G -->|calculate| H[Elevation Differences]
-    end
-
-    subgraph Filtering_Process
-        F -->|Input Data| V0[Initial Data]
-
-        subgraph Validation_Checks
-            V1[NLD elevation > 0.01m] --> VM[Validation Mask]
-            V2[3DEP elevation > 1.0m] --> VM
-            V3[No missing data] --> VM
-            V4[No extreme jumps] --> VM
-            V5[No unit mismatches] --> VM
-        end
-
-        subgraph Segment_Processing
-            V0 --> S1[Apply Validation Mask]
-            VM -->|filter| S1
-            S1 --> S2[Sort by Distance]
-            S2 --> S3[Calculate Differences]
-            S3 -->|Offset Check| S4[Check Mean Diff]
-            S4 -->|Std Dev Check| S5[Check Consistency]
-            S5 --> S6[Final Valid Segments]
-        end
-
-        subgraph Floodwall_Check
-            V0 -->|check segments| FW[Has Floodwalls?]
-            FW -->|yes| Skip[Skip System]
-            FW -->|no| S1
-        end
-
-        S6 --> G
-    end
-
-    subgraph Analysis_Visualization
-        H --> V[Visualization Module]
-        V --> P1[Individual Plots]
-        V --> P2[Summary Statistics]
-        V --> P3[Interactive Maps]
-        V --> P4[Geomorphic Analysis]
-        
-        subgraph Change_Analysis
-            P4 --> CA1[Degradation Analysis]
-            P4 --> CA2[Aggradation Patterns]
-            P4 --> CA3[Change Consistency]
-            P4 --> CA4[Geographic Patterns]
-        end
-    end
-
-    subgraph Data_Storage
-        F -->|save_parquet| P[(Processed Data)]
-        P2 -->|save_summary| S[(Summary Stats)]
-    end
-
-    linkStyle default stroke-width:2px
-
-    style Data_Collection fill:#f4f4f4,stroke:#333,stroke-width:2px
-    style Data_Processing fill:#e8f4ea,stroke:#333,stroke-width:2px
-    style Filtering_Process fill:#f4e8ea,stroke:#333,stroke-width:2px
-    style Analysis_Visualization fill:#e8eaf4,stroke:#333,stroke-width:2px
-    style Data_Storage fill:#f4f4e8,stroke:#333,stroke-width:2px
-
-    style Validation_Checks fill:#fff,stroke:#333,stroke-width:2px
-    style Segment_Processing fill:#fff,stroke:#333,stroke-width:2px
-    style Floodwall_Check fill:#fff,stroke:#333,stroke-width:2px
-    style Change_Analysis fill:#fff,stroke:#333,stroke-width:2px
+```bash
+# Copy segments data from external drive to local project
+mkdir -p data/segments && \
+cp -rv "/Volumes/My Passport/segments/"* "data/segments/" && \
+echo "✅ Levee data copied successfully to data/segments/"
 ```
 
-## Quick Start
+## Overview
+
+This package provides tools for analyzing USACE levee systems by:
+1. Sampling levee data from NLD and 3DEP sources
+2. Filtering and validating elevation profiles
+3. Visualizing elevation profiles and differences
+4. Comparing and analyzing elevation differences
+5. Exploring geographic patterns and trends
+6. Classifying levees based on elevation changes
+
+## Data Pipeline
+
+```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'fontFamily': 'arial', 'fontSize': '12px', 'primaryTextColor': '#000000' }}}%%
+graph TD
+    %% Data Sources & Initial Validation
+    A[NLD API] --> |Get Routes| V1{Floodwall Check}
+    V1 -->|Has Floodwall| X1[Skip System]
+    V1 -->|Pass| B1[Profile Data]
+
+    C[3DEP API] --> |Coverage Check| V2{1m Resolution?}
+    V2 -->|No| X2[Skip System]
+    V2 -->|Yes| B2[Elevation Data]
+
+    %% Raw Data Processing
+    B1 --> B3[Raw Profile]
+    B2 --> B3
+    B3 --> |Save| B4[processed/*.parquet]
+
+    %% Filtering Pipeline
+    B4 --> F0{Zero Check}
+    F0 -->|"<0.01m"| X3[Remove Points]
+    F0 -->|Pass| F1{Valid Range?}
+
+    F1 -->|"[-100m, 5000m]"| F2{Unit Check}
+    F1 -->|Outside| X4[Remove Points]
+
+    F2 -->|"Ratio ≈ 3.28"| F3[Convert to Meters]
+    F2 -->|Pass| F4{Elevation Diff}
+    F3 --> F4
+
+    F4 -->|"Diff > 50m"| X5[Remove Points]
+    F4 -->|Pass| F5{Min Points?}
+
+    F5 -->|"<3 points"| X6[Skip Segment]
+    F5 -->|Pass| F6[Split Segments]
+
+    F6 --> |Save| D[segments/*.parquet]
+
+    %% Visualization
+    D --> V[Visualization]
+
+    %% Styling
+    classDef process fill:#f2f2f2,stroke:#333,color:#000
+    classDef validation fill:#ffe6e6,stroke:#333,color:#000
+    classDef data fill:#e6ffee,stroke:#333,color:#000
+    classDef skip fill:#ffcccc,stroke:#333,color:#000
+
+    class A,C process
+    class V1,V2,F0,F1,F2,F4,F5 validation
+    class B1,B2,B3,B4,D data
+    class X1,X2,X3,X4,X5,X6 skip
+```
+
+## Installation
+
+You can install and run this project using either Poetry or UV.
+
+### Using UV (Recommended)
+
+```bash
+# Clone the repository
+git clone <repo>
+cd army_levees
+
+# Install UV if you haven't already
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Create virtual environment and install dependencies
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -e .
+```
+
+### Using Poetry (Alternative)
 
 ```bash
 # Clone the repository
@@ -109,177 +112,228 @@ poetry install
 poetry shell
 ```
 
-## Key Features
+## Usage
 
-1. **Data Collection**
-   - Fetches levee profiles from NLD API
-   - Samples matching elevations from USGS 3DEP
-   - Filters out floodwalls automatically
-   - Handles coordinate system transformations
-   - Supports async/await for efficient data collection
-
-2. **Analysis**
-   - Calculates elevation differences
-   - Identifies problematic sections
-   - Analyzes geomorphic changes
-   - Detects degradation/aggradation patterns
-   - Geographic pattern analysis
-   - Change consistency metrics
-
-3. **Visualization**
-   - Individual levee plots showing:
-     * Elevation profiles (NLD vs 3DEP)
-     * Difference distributions
-     * Coverage statistics
-   - Summary plots showing:
-     * Distribution of changes by category
-     * Cumulative change distributions
-     * Change consistency analysis
-     * Geographic patterns
-   - Interactive maps with:
-     * System locations
-     * Change magnitudes
-     * Elevation profiles
-     * Detailed statistics
-
-## Usage Examples
-
-### 1. Get Random Levee Samples
-```python
-from army_levees.core.sample_levees import get_random_levees
-
-# Get 10 new random samples (skips already processed systems)
-results = get_random_levees(n_samples=10, max_concurrent=4)
-```
-
-### 2. Plot Individual Levee System
-```python
-from army_levees.core.visualize.individual import plot_elevation_profile
-from army_levees.core.visualize.utils import load_levee_data
-
-# Load and visualize a specific system
-data = load_levee_data("5205000591")
-if data is not None:
-    plot_elevation_profile(data)
-```
-
-### 3. Analyze Existing Dataset
-```python
-from army_levees.core.visualize.summary import plot_summary
-
-# Generate summary plots and statistics
-plot_summary(save_dir="plots")
-```
-
-### 4. Create Interactive Map
-```python
-from army_levees.core.visualize.interactive import create_summary_map
-
-# Generate interactive map of all systems
-create_summary_map(save_path="plots/levee_summary_map.html")
-```
-
-### 5. Run Diagnostics
-```python
-from army_levees.core.visualize.individual import diagnose_elevation_differences
-
-# Print diagnostic information for a system
-diagnose_elevation_differences("5205000591")
-```
-
-## CLI
-
-The package provides command-line tools for sampling and analyzing levee systems:
-
-### Sample Levees
+### Sampling Levee Data
 ```bash
-# Get 10 new random levee samples
+# Using UV:
+python -m army_levees.core.sample_levees -n 10
+
+# Using Poetry:
 poetry run python -m army_levees.core.sample_levees -n 10
 
-# Include already processed systems in sampling
-poetry run python -m army_levees.core.sample_levees -n 10 --include_existing
+# Increase concurrent connections
+# Using UV:
+python -m army_levees.core.sample_levees -n 10 --max_concurrent 4
 
-# Control concurrent connections
-poetry run python -m army_levees.core.sample_levees -n 10 --max_concurrent 8
+# Using Poetry:
+poetry run python -m army_levees.core.sample_levees -n 10 --max_concurrent 4
 ```
 
-### Visualize Levees
+The sampling process:
+- Checks for 1m 3DEP coverage
+- Downloads NLD profile data
+- Retrieves corresponding 3DEP elevations
+- Saves raw data to data/processed directory
+- Handles unit conversions automatically
+- Skips systems with significant floodwalls
+
+### Filtering Levee Data
 ```bash
-# Plot a specific levee system
-poetry run python -m army_levees.core.visualize_levee --plot 5205000591
+# Filter with default settings
+# Using UV:
+python -m army_levees.core.filter_levees
 
-# Plot a random levee system
-poetry run python -m army_levees.core.visualize_levee --plot --random
+# Using Poetry:
+poetry run python -m army_levees.core.filter_levees
 
-# Create summary plots for all processed levees
-poetry run python -m army_levees.core.visualize_levee --summary
+# Customize filtering parameters
+# Using UV:
+python -m army_levees.core.filter_levees \
+    --input-dir data/processed \
+    --output-dir data/segments \
+    --zero-threshold 0.01 \
+    --min-points 3 \
+    --max-elev-diff 50.0
 
-# Create interactive map of all levees
-poetry run python -m army_levees.core.visualize_levee --map
-
-# Run diagnostics on a specific system
-poetry run python -m army_levees.core.visualize_levee --diagnose 5205000591
-
-# Specify custom save directory
-poetry run python -m army_levees.core.visualize_levee --plot --random --save_dir custom_plots
+# Using Poetry:
+poetry run python -m army_levees.core.filter_levees \
+    --input-dir data/processed \
+    --output-dir data/segments \
+    --zero-threshold 0.01 \
+    --min-points 3 \
+    --max-elev-diff 50.0
 ```
 
-### Multi Profile Plot
+The filtering process:
+- Removes invalid elevation values
+- Handles feet-to-meters conversions
+- Splits profiles into valid segments
+- Applies quality control checks:
+  - Minimum number of points
+  - Maximum elevation differences
+  - Valid elevation ranges
+  - Coverage requirements
+- Saves filtered segments to data/segments directory
+
+### Interactive Dashboard
 ```bash
-# Plot all profile types
-python -m army_levees.core.visualize.multi_profile_plot --type all
+# Run the dashboard with default settings
+# Using UV:
+python -m army_levees.core.visualize dashboard
 
-# Plot only degradation profiles
-python -m army_levees.core.visualize.multi_profile_plot --type degradation
+# Using Poetry:
+poetry run python -m army_levees.core.visualize dashboard
 
-# Plot only stable profiles
-python -m army_levees.core.visualize.multi_profile_plot --type stable
+# Specify custom data directory and port
+# Using UV:
+python -m army_levees.core.visualize dashboard --data-dir custom/data/path --port 8040
 
-# Specify custom directories
-python -m army_levees.core.visualize.multi_profile_plot --type all --data_dir custom/data/path --output_dir custom/output/path
+# Using Poetry:
+poetry run python -m army_levees.core.visualize dashboard --data-dir custom/data/path --port 8040
 ```
 
-### CLI Arguments
+The dashboard provides:
+- Interactive map of all levee systems
+- Detailed elevation profiles with filled difference areas
+- Real-time elevation difference analysis
+- Satellite/street map overlays
+- Color-coded elevation differences
 
-**sample_levees.py**:
+### Individual Profile Analysis
+```bash
+# Plot a single system
+# Using UV:
+python -m army_levees.core.visualize plot 5205000591
+
+# Using Poetry:
+poetry run python -m army_levees.core.visualize plot 5205000591
+
+# Show plot instead of saving
+# Using UV:
+python -m army_levees.core.visualize plot 5205000591 --show
+
+# Using Poetry:
+poetry run python -m army_levees.core.visualize plot 5205000591 --show
+
+# Print diagnostic information
+# Using UV:
+python -m army_levees.core.visualize diagnose 5205000591
+
+# Using Poetry:
+poetry run python -m army_levees.core.visualize diagnose 5205000591
+```
+
+### Multi-Profile Analysis
+```bash
+# Plot all profiles
+# Using UV:
+python -m army_levees.core.visualize multi
+
+# Using Poetry:
+poetry run python -m army_levees.core.visualize multi
+
+# Plot specific profile types
+# Using UV:
+python -m army_levees.core.visualize multi --type significant
+python -m army_levees.core.visualize multi --type non_significant
+
+# Using Poetry:
+poetry run python -m army_levees.core.visualize multi --type significant
+poetry run python -m army_levees.core.visualize multi --type non_significant
+
+# Show plots instead of saving
+# Using UV:
+python -m army_levees.core.visualize multi --type significant --show
+
+# Using Poetry:
+poetry run python -m army_levees.core.visualize multi --type significant --show
+
+# Use raw data and specify directories
+# Using UV:
+python -m army_levees.core.visualize multi --raw-data \
+    --data-dir custom/data \
+    --output-dir custom/output \
+    --summary-dir custom/summary
+
+# Using Poetry:
+poetry run python -m army_levees.core.visualize multi --raw-data \
+    --data-dir custom/data \
+    --output-dir custom/output \
+    --summary-dir custom/summary
+```
+
+## CLI Arguments
+
+### Sampling Command
 - `-n, --n_samples`: Number of systems to sample (default: 10)
-- `--include_existing`: Include already processed systems in sampling
-- `--max_concurrent`: Maximum number of concurrent connections (default: 4)
+- `--max_concurrent`: Maximum concurrent connections (default: 1)
 
-**visualize_levee.py**:
-- `system_id`: USACE system ID to plot (required with --plot or --diagnose)
-- `-r, --random`: Use a random levee system
-- `-p, --plot`: Create plots for the system
-- `-s, --summary`: Create summary plots for all processed levees
-- `-d, --diagnose`: Run diagnostics on the system
-- `-m, --map`: Create interactive summary map
-- `--save_dir`: Directory to save outputs (default: plots)
+### Filtering Command
+- `--input-dir`: Directory containing raw parquet files (default: data/processed)
+- `--output-dir`: Directory to save filtered files (default: data/segments)
+- `--zero-threshold`: Threshold for considering elevation as zero (default: 0.01)
+- `--min-points`: Minimum points required per segment (default: 3)
+- `--max-elev-diff`: Maximum allowed elevation difference (default: 50.0)
+
+### Dashboard Command
+- `--data-dir`: Directory containing levee segment data (default: data/segments)
+- `--port`: Port to run the dashboard on (default: 8050)
+- `--debug`: Run in debug mode
+- `--raw`: Use raw data instead of processed data
+
+### Plot Command
+- `system_id`: System ID to plot
+- `--data-dir`: Directory containing levee segment data
+- `--save-dir`: Directory to save plots (default: plots)
+- `--raw`: Use raw data instead of processed data
+- `--show`: Show plot instead of saving
+
+### Diagnose Command
+- `system_id`: System ID to diagnose
+- `--data-dir`: Directory containing levee segment data
+- `--raw`: Use raw data instead of processed data
+
+### Multi-Profile Command
+- `--type`: Profile type to plot (all, significant, non_significant)
+- `--data-dir`: Directory containing filtered segments
+- `--raw-data`: Use raw data from data/processed
+- `--output-dir`: Directory to save plots (default: plots/profiles)
+- `--summary-dir`: Directory containing classification CSV files
+- `--show`: Show plots instead of saving them
 
 ## Project Structure
 
 ```
 army_levees/
 ├── army_levees/          # Main package
+│   ├── sample_levees.py   # Data sampling
+│   ├── filter_levees.py   # Data filtering
 │   └── core/            # Core functionality
-│       ├── nld_api.py   # NLD API interface
-│       ├── sample_levees.py  # Sampling functions
 │       └── visualize/   # Visualization modules
 │           ├── __init__.py
-│           ├── individual.py  # Individual system plots
-│           ├── interactive.py # Interactive maps
-│           ├── summary.py     # Summary statistics
-│           └── utils.py       # Shared utilities
+│           ├── __main__.py     # CLI entry point
+│           ├── dash_app.py     # Interactive dashboard
+│           ├── multi_profile_plot.py  # Multi-system analysis
+│           └── utils.py        # Core utilities
 ├── data/
-│   └── processed/       # Processed parquet files
-├── docs/               # Documentation
-├── plots/             # Generated plots
-├── tests/             # Test suite
-├── pyproject.toml     # Poetry configuration
-└── README.md
+│   ├── processed/       # Raw sampled data
+│   └── segments/        # Filtered segments
+└── plots/              # Generated plots
 ```
 
 ## Data Format
 
+### Raw Data (data/processed/)
+Each parquet file contains:
+- `system_id`: USACE system ID
+- `elevation`: NLD elevation (meters)
+- `dep_elevation`: 3DEP elevation (meters)
+- `dep_max_elevation`: Maximum 3DEP elevation in buffer (meters)
+- `distance_along_track`: Distance along levee (meters)
+- `geometry`: Point geometry (EPSG:3857)
+
+### Filtered Segments (data/segments/)
 Each parquet file contains:
 - `system_id`: USACE system ID
 - `elevation`: NLD elevation (meters)
@@ -287,62 +341,9 @@ Each parquet file contains:
 - `difference`: NLD - 3DEP (meters)
 - `distance_along_track`: Distance along levee (meters)
 - `geometry`: Point geometry (EPSG:4326)
-- `elevation_diff`: Change between consecutive points
-- `elevation_diff_pct`: Percent change between points
 
-## Contributing
+## Classification Criteria
 
-To add more samples to the dataset:
-1. Install the package as above
-2. Run `poetry run python -m army_levees.core.sample_levees -n 10`
-3. New samples will be added to `data/processed/`
-
-The script will:
-- Skip systems that are already processed
-- Show dataset statistics
-- Generate visualizations
-- Save a summary CSV
-
-## Dependencies
-
-Key packages (see pyproject.toml for full list):
-- geopandas (^0.14.1)
-- shapely (^2.0.2)
-- pandas (^2.1.3)
-- numpy (^1.26.2)
-- matplotlib (^3.8.2)
-- seaborn (^0.13.0)
-- py3dep (^0.16.2)
-- pyarrow (^15.0.0)
-- requests (^2.31.0)
-- duckdb (^0.9.2)
-- cartopy (^0.22.0)
-- scikit-learn (^1.3.2)
-- earthengine-api (^0.1.390)
-- geemap (^0.31.0)
-- statsmodels (^0.14.1)
-- utm (^0.7.0)
-
-Additional dependencies for specific functionality:
-- ccrs (^1.0.0) - Cartographic projections
-- matplotlib-scalebar (^0.8.1) - Map scale bars
-- topojson/geojson (^1.7/^3.1.0) - GeoJSON processing
-- geopy (^2.4.1) - Geocoding utilities
-- osmnx (^1.9.1) - OpenStreetMap data
-- segment-geospatial (^0.10.2) - Geospatial segmentation
-- pycrs (^1.0.2) - CRS transformations
-- eemont (^0.3.6) - Earth Engine utilities
-
-## Development
-
-For development:
-```bash
-# Install dev dependencies
-poetry install --with dev
-
-# Run tests
-poetry run pytest
-
-# Format code
-poetry run black .
-```
+Levees are classified based on their mean elevation differences:
+- **Significant**: Mean change > 0.1m or < -0.1m
+- **Non-significant**: Mean change between -0.1m and 0.1m

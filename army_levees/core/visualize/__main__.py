@@ -1,86 +1,217 @@
-"""Main entry point for visualization module.
-
-Usage:
-    poetry run python -m army_levees.core.visualize [--systems N] [--threshold T] [--output-dir DIR]
-"""
+"""Main entry point for visualization module."""
 
 import argparse
 import logging
+import sys
 from pathlib import Path
 
-from .interactive import create_summary_map
-from .summary import analyze_large_differences, investigate_problematic_systems
-from .utils import get_processed_systems
+from .utils import (
+    plot_elevation_profile,
+    diagnose_elevation_differences,
+    get_processed_systems,
+    calculate_system_difference
+)
+from .dash_app import create_dash_app
+from .multi_profile_plot import main as plot_multi_profiles
 
 logger = logging.getLogger(__name__)
 
-
 def main():
-    """Run main visualization analysis."""
+    """Main entry point for visualization."""
+    # Store original argv
+    original_argv = sys.argv[:]
+
     parser = argparse.ArgumentParser(
-        description="Analyze and visualize levee elevation data"
+        description="Visualize levee elevation data"
     )
-    parser.add_argument(
-        "--systems",
-        type=int,
-        default=5,
-        help="Number of problematic systems to investigate",
-    )
-    parser.add_argument(
-        "--threshold",
-        type=float,
-        default=5.0,
-        help="Elevation difference threshold (meters)",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=Path("plots"),
-        help="Output directory for plots",
-    )
-    parser.add_argument(
+
+    # Add subparsers for different commands
+    subparsers = parser.add_subparsers(dest='command', help='Command to run')
+
+    # Dashboard command
+    dash_parser = subparsers.add_parser('dashboard', help='Run interactive dashboard')
+    dash_parser.add_argument(
         "--data-dir",
-        type=Path,
-        default=Path("data/filtered"),
-        help="Directory containing levee data (default: data/filtered)",
+        type=str,
+        default="data/segments",
+        help="Directory containing levee segment data",
     )
-    parser.add_argument(
+    dash_parser.add_argument(
+        "--port",
+        type=int,
+        default=8050,
+        help="Port to run the dashboard on",
+    )
+    dash_parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Run in debug mode",
+    )
+    dash_parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="Use raw data instead of processed data",
+    )
+
+    # Plot command
+    plot_parser = subparsers.add_parser('plot', help='Plot a single system')
+    plot_parser.add_argument(
+        'system_id',
+        type=str,
+        help='System ID to plot',
+    )
+    plot_parser.add_argument(
+        "--data-dir",
+        type=str,
+        default="data/segments",
+        help="Directory containing levee segment data",
+    )
+    plot_parser.add_argument(
+        "--save-dir",
+        type=str,
+        default="plots",
+        help="Directory to save plots",
+    )
+    plot_parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="Use raw data instead of processed data",
+    )
+    plot_parser.add_argument(
+        "--show",
+        action="store_true",
+        help="Show plot instead of saving",
+    )
+
+    # Diagnose command
+    diag_parser = subparsers.add_parser('diagnose', help='Print diagnostic information')
+    diag_parser.add_argument(
+        'system_id',
+        type=str,
+        help='System ID to diagnose',
+    )
+    diag_parser.add_argument(
+        "--data-dir",
+        type=str,
+        default="data/segments",
+        help="Directory containing levee segment data",
+    )
+    diag_parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="Use raw data instead of processed data",
+    )
+
+    # Multi-profile command
+    multi_parser = subparsers.add_parser('multi', help='Plot multiple profiles')
+    multi_parser.add_argument(
+        "--type",
+        type=str,
+        choices=['all', 'significant', 'non_significant'],
+        default='all',
+        help="Type of profiles to plot",
+    )
+    multi_parser.add_argument(
+        "--data-dir",
+        type=str,
+        default="data/segments",
+        help="Directory containing filtered segments",
+    )
+    multi_parser.add_argument(
         "--raw-data",
         action="store_true",
-        help="Use raw data from data/processed instead of filtered data",
+        help="Use raw data from data/processed instead of filtered segments",
+    )
+    multi_parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="plots/profiles",
+        help="Directory to save plots",
+    )
+    multi_parser.add_argument(
+        "--summary-dir",
+        type=str,
+        default="data/system_id_summary",
+        help="Directory containing classification CSV files",
+    )
+    multi_parser.add_argument(
+        "--show",
+        action="store_true",
+        help="Show plots instead of saving them",
+    )
+
+    # Add new stats command
+    stats_parser = subparsers.add_parser('stats', help='Calculate elevation difference statistics')
+    stats_parser.add_argument(
+        'system_id',
+        type=str,
+        help='System ID to analyze'
+    )
+    stats_parser.add_argument(
+        "--data-dir",
+        type=str,
+        default="data/processed",
+        help="Directory containing processed data files"
     )
 
     args = parser.parse_args()
 
-    # Create output directory
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    if args.command == 'dashboard':
+        create_dash_app(
+            data_dir=args.data_dir,
+            raw_data=args.raw,
+            debug=args.debug,
+            port=args.port,
+        )
 
-    # Use raw or filtered data
-    data_dir = Path("data/processed") if args.raw_data else args.data_dir
+    elif args.command == 'plot':
+        plot_elevation_profile(
+            args.system_id,
+            save_dir=args.save_dir,
+            data_dir=args.data_dir,
+            raw_data=args.raw,
+            show=args.show,
+        )
 
-    # Get total number of systems
-    systems = get_processed_systems()
-    logger.info(f"Found {len(systems)} processed levee systems")
+    elif args.command == 'diagnose':
+        diagnose_elevation_differences(
+            args.system_id,
+            data_dir=args.data_dir,
+            raw_data=args.raw,
+        )
 
-    # Run analysis pipeline
-    logger.info("\n1. Analyzing elevation differences...")
-    large_diffs = analyze_large_differences(threshold=args.threshold)
+    elif args.command == 'multi':
+        # Reconstruct argv for multi_profile_plot
+        multi_argv = [sys.argv[0]]  # Keep the script name
+        if args.type != 'all':
+            multi_argv.extend(['--type', args.type])
+        if args.data_dir != 'data/segments':
+            multi_argv.extend(['--data-dir', args.data_dir])
+        if args.raw_data:
+            multi_argv.append('--raw-data')
+        if args.output_dir != 'plots/profiles':
+            multi_argv.extend(['--output-dir', args.output_dir])
+        if args.summary_dir != 'data/system_id_summary':
+            multi_argv.extend(['--summary-dir', args.summary_dir])
+        if args.show:
+            multi_argv.append('--show')
 
-    logger.info("\n2. Investigating problematic systems...")
-    investigate_problematic_systems(n_systems=args.systems)
+        # Replace sys.argv and run multi_profile_plot
+        sys.argv = multi_argv
+        plot_multi_profiles()
 
-    logger.info("\n3. Creating interactive summary map...")
-    summary_map = create_summary_map(
-        save_path=args.output_dir / "levee_summary_map.html"
-    )
-    if summary_map:
-        logger.info(f"Saved summary map to {args.output_dir}/levee_summary_map.html")
+        # Restore original argv
+        sys.argv = original_argv
 
-    logger.info("\nVisualization complete! Check the plots directory for results.")
+    elif args.command == 'stats':
+        calculate_system_difference(
+            args.system_id,
+            data_dir=args.data_dir
+        )
+
+    else:
+        parser.print_help()
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-    )
     main()

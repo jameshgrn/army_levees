@@ -82,3 +82,12 @@ artificiallevees.pptx
 .venv/
 .thoughts
 cache/
+
+#random python files
+simple2d.py
+
+# UV
+.venv/
+.uv/
+__pypackages__/
+.python-version
