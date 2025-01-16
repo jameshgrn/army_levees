@@ -36,8 +36,8 @@ def get_color_scale(values: np.ndarray, force_symmetric: bool = True) -> Tuple[L
     else:
         scale_values = np.linspace(-vmax, vmax, 11)  # Use odd number to include 0
 
-    # Get RdYlBu colormap
-    cmap = plt.get_cmap('RdYlBu')
+    # Get RdYlBu colormap and REVERSE it
+    cmap = plt.get_cmap('RdYlBu_r')  # Note the _r suffix to reverse
 
     # Create normalized positions (0 to 1)
     positions = (scale_values - scale_values.min()) / (scale_values.max() - scale_values.min())
