@@ -226,3 +226,46 @@ def _print_segment_stats(gdf: gpd.GeoDataFrame) -> None:
     print(f"  Std:  {diff.std():.1f}m")
     print(f"  Min:  {diff.min():.1f}m")
     print(f"  Max:  {diff.max():.1f}m")
+
+
+def calculate_system_difference(
+    system_id: str,
+    data_dir: str | Path = "data/processed"
+) -> tuple[float, float, float, int] | None:
+    """Calculate elevation difference statistics for a system.
+
+    Args:
+        system_id: System ID to analyze
+        data_dir: Directory containing processed data files
+
+    Returns:
+        Tuple of (mean_difference, median_difference, std_difference, n_points) or None if error
+    """
+    try:
+        # Load the parquet file
+        file_path = Path(data_dir) / f"levee_{system_id}.parquet"
+        if not file_path.exists():
+            print(f"No data found for system {system_id}")
+            return None
+
+        # Read the data
+        gdf = gpd.read_parquet(file_path)
+
+        # Calculate difference (NLD - 3DEP)
+        diff = gdf['elevation'] - gdf['dep_elevation']
+        mean_diff = diff.mean()
+        median_diff = diff.median()
+        std_diff = diff.std()
+        n_points = len(gdf)
+
+        print(f"\nSystem {system_id} Statistics:")
+        print(f"Mean difference (NLD - 3DEP): {mean_diff:.2f} meters")
+        print(f"Median difference (NLD - 3DEP): {median_diff:.2f} meters")
+        print(f"Standard deviation: {std_diff:.2f} meters")
+        print(f"Number of points: {n_points}")
+
+        return mean_diff, median_diff, std_diff, n_points
+
+    except Exception as e:
+        print(f"Error calculating difference for system {system_id}: {e}")
+        return None

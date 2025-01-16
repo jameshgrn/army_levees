@@ -8,7 +8,8 @@ from pathlib import Path
 from .utils import (
     plot_elevation_profile,
     diagnose_elevation_differences,
-    get_processed_systems
+    get_processed_systems,
+    calculate_system_difference
 )
 from .dash_app import create_dash_app
 from .multi_profile_plot import main as plot_multi_profiles
@@ -139,6 +140,20 @@ def main():
         help="Show plots instead of saving them",
     )
 
+    # Add new stats command
+    stats_parser = subparsers.add_parser('stats', help='Calculate elevation difference statistics')
+    stats_parser.add_argument(
+        'system_id',
+        type=str,
+        help='System ID to analyze'
+    )
+    stats_parser.add_argument(
+        "--data-dir",
+        type=str,
+        default="data/processed",
+        help="Directory containing processed data files"
+    )
+
     args = parser.parse_args()
 
     if args.command == 'dashboard':
@@ -187,6 +202,12 @@ def main():
 
         # Restore original argv
         sys.argv = original_argv
+
+    elif args.command == 'stats':
+        calculate_system_difference(
+            args.system_id,
+            data_dir=args.data_dir
+        )
 
     else:
         parser.print_help()

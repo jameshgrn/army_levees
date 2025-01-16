@@ -14,6 +14,9 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Set, Tuple, Union
+from enum import Enum
+import csv
+from datetime import datetime
 
 import aiohttp
 import geopandas as gpd
@@ -129,6 +132,48 @@ def get_usace_system_ids() -> List[str]:
         return []
 
 
+class SystemStatus(Enum):
+    """Status codes for levee systems."""
+    SUCCESS = "success"  # Successfully processed
+    HAS_FLOODWALL = "has_floodwall"  # Contains significant floodwall
+    NO_DATA = "no_data"  # No data available from NLD
+    EMPTY_RESPONSE = "empty_response"  # Empty response from API
+    NO_3DEP = "no_3dep"  # No 3DEP coverage
+    INVALID_BOUNDS = "invalid_bounds"  # Invalid coordinate bounds
+    TOO_FEW_POINTS = "too_few_points"  # Not enough valid points
+    ERROR = "error"  # Other error
+
+def update_system_status(system_id: str, status: SystemStatus, details: str = ""):
+    """Update the status log for a system."""
+    status_file = Path("data/system_status.csv")
+
+    # Create header if file doesn't exist
+    if not status_file.exists():
+        status_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(status_file, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['system_id', 'status', 'details', 'timestamp'])
+        existing_statuses = {}
+    else:
+        # Read existing statuses
+        existing_statuses = {}
+        with open(status_file, 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                existing_statuses[row['system_id']] = row['status']
+
+    # Only write if status has changed or doesn't exist
+    if system_id not in existing_statuses or existing_statuses[system_id] != status.value:
+        with open(status_file, 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                system_id,
+                status.value,
+                details,
+                datetime.now().isoformat()
+            ])
+
+
 async def get_nld_profile_async(
     system_id: str, session: aiohttp.ClientSession, stats: ProcessingStats
 ) -> Optional[np.ndarray]:
@@ -160,16 +205,17 @@ async def get_nld_profile_async(
 
                 segments = await response.json()
 
-                # Only skip if floodwall miles are significant
-                has_significant_floodwall = any(
-                    segment.get("floodwallMiles", 0) > 0.1  # Add 0.1 mile threshold
+                # Only skip if any segment has floodwall miles
+                has_floodwall = any(
+                    segment.get("floodwallMiles", 0) > 0.0  # Add 0.0 mile threshold
                     for segment in segments
                 )
-                if has_significant_floodwall:
+                if has_floodwall:
                     stats.floodwalls += 1
                     logger.info(
-                        f"System {system_id} contains significant floodwall miles. Skipping."
+                        f"System {system_id} contains floodwall miles. Skipping."
                     )
+                    update_system_status(system_id, SystemStatus.HAS_FLOODWALL)
                     return None
 
             # Get profile data if no floodwalls
@@ -187,6 +233,7 @@ async def get_nld_profile_async(
                 profile_data = await response.json()
                 if not profile_data:
                     logger.error("Error: Empty response")
+                    update_system_status(system_id, SystemStatus.EMPTY_RESPONSE)
                     stats.no_data += 1
                     return None
 
@@ -228,6 +275,7 @@ async def get_nld_profile_async(
 
         except Exception as e:
             logger.error(f"Error getting profile data for system {system_id}: {str(e)}")
+            update_system_status(system_id, SystemStatus.ERROR, str(e))
             return None
 
     logger.error(
@@ -560,26 +608,53 @@ async def process_system(
                 # Attempt to load existing data
                 existing_data = gpd.read_parquet(processed_path)
                 if len(existing_data) > 0:
-                    logger.info(f"System {system_id}: Loading existing data")
+                    logger.info(f"System {system_id}: Using existing data ({len(existing_data)} points)")
+                    stats.success += 1  # Count existing data as success
+                    update_system_status(system_id, SystemStatus.SUCCESS, f"Loaded {len(existing_data)} points")
                     return existing_data
                 else:
-                    logger.warning(
-                        f"System {system_id}: Existing data empty, reprocessing"
-                    )
+                    logger.warning(f"System {system_id}: Existing data empty, reprocessing")
             except Exception as e:
-                logger.warning(
-                    f"System {system_id}: Error loading existing data, reprocessing: {e}"
-                )
+                logger.warning(f"System {system_id}: Error loading existing data, reprocessing: {e}")
+        else:
+            logger.info(f"System {system_id}: No existing data found, downloading...")
 
         # Check cache next
         if system_id in profile_cache:
             return profile_cache[system_id]
 
-        # Get NLD profile
+        # Get profile data
         coords = await get_nld_profile_async(system_id, session, stats)
         if coords is None:
             stats.no_data += 1
             logger.warning(f"System {system_id}: No profile data available")
+            return None
+
+        # Check 3DEP coverage before proceeding
+        bounds = [
+            coords[:, 0].min() - 0.001,  # Add small buffer
+            coords[:, 1].min() - 0.001,
+            coords[:, 0].max() + 0.001,
+            coords[:, 1].max() + 0.001,
+        ]
+
+        # Convert bounds if needed
+        if bounds[0] > 180 or bounds[0] < -180:  # Likely in web mercator
+            gdf = gpd.GeoDataFrame(
+                geometry=[shapely_box(*bounds)],
+                crs=3857
+            ).to_crs(4326)
+            bounds = gdf.total_bounds.tolist()
+
+        # Check 3DEP coverage
+        try:
+            sources = py3dep.query_3dep_sources(bounds, crs=4326, res="1m")
+            if sources is None or sources.empty:
+                update_system_status(system_id, SystemStatus.NO_3DEP)
+                return None
+        except Exception as e:
+            logger.debug(f"Error checking 3DEP coverage: {e}")
+            update_system_status(system_id, SystemStatus.NO_3DEP)
             return None
 
         # Convert numpy array coordinates to list of tuples
@@ -587,7 +662,7 @@ async def process_system(
 
         # Get 3DEP elevations with increased buffer size
         dep_elevations = await get_3dep_elevations_async(
-            coords_list, crs=3857, buffer_size=2  # 5x5 window (2 pixels on each side)
+            coords_list, crs=3857, buffer_size=2
         )
 
         # Create GeoDataFrame with validation
@@ -595,10 +670,15 @@ async def process_system(
         if gdf is None:
             return None
 
-        # Apply filtering
-        filtered_gdf = filter_valid_segments(gdf)
+        # Apply filtering with relaxed constraints
+        filtered_gdf = filter_valid_segments(
+            gdf,
+            min_points=3,  # Reduce minimum points requirement
+            min_coverage=0.0  # Accept any coverage above zero
+        )
         if len(filtered_gdf) == 0:
             logger.error(f"System {system_id}: No valid points after filtering")
+            update_system_status(system_id, SystemStatus.TOO_FEW_POINTS)
             return None
 
         # Cache and save
@@ -607,10 +687,15 @@ async def process_system(
         save_dir.mkdir(parents=True, exist_ok=True)
         filtered_gdf.to_parquet(save_dir / f"levee_{system_id}.parquet")
 
+        # Record successful processing
+        update_system_status(system_id, SystemStatus.SUCCESS, f"Downloaded {len(filtered_gdf)} points")
+        stats.success += 1
+
         return filtered_gdf
 
     except Exception as e:
         logger.error(f"Error processing system {system_id}: {str(e)}")
+        update_system_status(system_id, SystemStatus.ERROR, str(e))
         return None
 
 
@@ -618,48 +703,57 @@ async def get_random_levees_async(n_samples: int = 10, max_concurrent: int = 1) 
     """Get random sample of NEW levee systems using async/await."""
     stats = ProcessingStats()
 
-    # Get system IDs from USACE API
+    # Get existing and attempted systems
+    existing_systems = set()
+    attempted_systems = set()
+
+    # Get systems from parquet files
+    processed_dir = Path("data/processed")
+    if processed_dir.exists():
+        for f in processed_dir.glob("levee_*.parquet"):
+            system_id = f.stem.replace("levee_", "")
+            existing_systems.add(system_id)
+
+    # Get systems from status.csv
+    status_file = Path("data/system_status.csv")
+    if status_file.exists():
+        status_df = pd.read_csv(status_file)
+        attempted_systems.update(status_df['system_id'].unique())
+
+    logger.info(f"Found {len(existing_systems)} existing processed systems")
+    logger.info(f"Found {len(attempted_systems)} previously attempted systems")
+
+    # Get all system IDs
     usace_ids = get_usace_system_ids()
     if not usace_ids:
         logger.error("\nCannot get levee data: USACE API is unavailable.")
         return []
 
+    # Filter out already processed AND attempted systems
+    new_system_ids = [sid for sid in usace_ids if sid not in existing_systems and sid not in attempted_systems]
+    logger.info(f"Found {len(new_system_ids)} completely new systems to try")
+
+    if not new_system_ids:
+        logger.error("\nNo new systems available to sample.")
+        return []
+
+    # Sample more than we need to account for failures
+    sample_size = min(n_samples * 3, len(new_system_ids))
+    sample_ids = np.random.choice(new_system_ids, size=sample_size, replace=False)
+
+    # Process samples
+    results = []
     async with aiohttp.ClientSession() as session:
-        # Check 3DEP coverage first
-        coverage = await check_3dep_coverage(usace_ids, session)
-
-        # Filter to systems with good coverage
-        good_coverage = [sid for sid, res in coverage.items() if res == "1m"]
-        if not good_coverage:
-            logger.error("No systems found with 1m 3DEP coverage")
-            return []
-
-        logger.info(f"Found {len(good_coverage)} systems with 1m coverage")
-
-        # Sample from systems with good coverage
-        results = []
-        attempted_ids = set()
-        batch_size = min(25, max(n_samples * 2, 15))
-
-        while len(results) < n_samples and len(attempted_ids) < len(good_coverage):
-            # Sample new batch
-            available_ids = [id for id in good_coverage if id not in attempted_ids]
-            if not available_ids:
-                break
-
-            sample_ids = np.random.choice(
-                available_ids, min(batch_size, len(available_ids)), replace=False
-            )
-            attempted_ids.update(sample_ids)
-
-            # Process batch
-            tasks = [process_system(sid, session, stats) for sid in sample_ids]
-            for task in asyncio.as_completed(tasks):
-                result = await task
+        for system_id in tqdm(sample_ids, desc="Processing samples"):
+            try:
+                result = await process_system(system_id, session, stats)
                 if result is not None:
                     results.append(result)
                     if len(results) >= n_samples:
                         break
+            except Exception as e:
+                logger.error(f"Error processing system {system_id}: {e}")
+                continue
 
     return results
 
@@ -839,8 +933,8 @@ def get_dem_vrt(
 
 def filter_valid_segments(
     gdf: gpd.GeoDataFrame,
-    min_points: int = 10,
-    min_coverage: float = 0.25,  # Set to 25%
+    min_points: int = 3,  # Reduce from 10 to 3
+    min_coverage: float = 0.0,  # Reduce from 0.25 to 0.0
 ) -> gpd.GeoDataFrame:
     """Filter a single levee profile."""
     try:
@@ -880,80 +974,182 @@ def log_progress_summary(stats: ProcessingStats) -> None:
     )
 
 
-async def check_3dep_coverage(
-    system_ids: List[str], session: aiohttp.ClientSession
-) -> Dict[str, str]:
-    """Check 3DEP coverage for all levee systems.
-
-    Returns:
-        Dict mapping system_id to best available resolution ('1m', '3m', '10m', or None)
-    """
+async def check_3dep_coverage(system_ids: List[str], session: aiohttp.ClientSession) -> Dict[str, str]:
+    """Check 3DEP coverage for all levee systems."""
     coverage = {}
     all_bounds = []
 
     # First get bounds for all systems
     logger.info("Getting system bounds...")
-    for system_id in tqdm(system_ids):
-        try:
-            # Get profile data
-            coords = await get_nld_profile_async(system_id, session, ProcessingStats())
-            if coords is not None:
-                bounds = [
-                    coords[:, 0].min(),  # minx
-                    coords[:, 1].min(),  # miny
-                    coords[:, 0].max(),  # maxx
-                    coords[:, 1].max(),  # maxy
-                ]
-                all_bounds.append((system_id, bounds))
-        except Exception as e:
-            logger.error(f"Error getting bounds for system {system_id}: {e}")
+    with tqdm(total=len(system_ids), desc="Collecting bounds") as pbar:
+        for system_id in system_ids:
+            try:
+                # Get profile data
+                coords = await get_nld_profile_async(system_id, session, ProcessingStats())
+                if coords is not None:
+                    bounds = [
+                        coords[:, 0].min() - 0.001,  # Add small buffer
+                        coords[:, 1].min() - 0.001,
+                        coords[:, 0].max() + 0.001,
+                        coords[:, 1].max() + 0.001,
+                    ]
+                    # Convert bounds to WGS84 if they're not already
+                    if bounds[0] > 180 or bounds[0] < -180:  # Likely in web mercator
+                        gdf = gpd.GeoDataFrame(
+                            geometry=[shapely_box(*bounds)],
+                            crs=3857
+                        ).to_crs(4326)
+                        bounds = gdf.total_bounds.tolist()
+                    all_bounds.append((system_id, bounds))
+            except Exception as e:
+                logger.warning(f"Error getting bounds for system {system_id}: {e}")
+            finally:
+                pbar.update(1)
 
-    # Check 3DEP coverage for each system
-    logger.info("Checking 3DEP coverage...")
-    for system_id, bbox in tqdm(all_bounds):
-        try:
-            # Try 1m first
-            sources = py3dep.query_3dep_sources(bbox, crs=4326, res="1m")
-            if sources is not None and not sources.empty:
-                coverage[system_id] = "1m"
-                continue
+    # Now check 3DEP coverage for collected bounds in smaller batches
+    logger.info(f"\nChecking 3DEP coverage for {len(all_bounds)} systems...")
+    batch_size = 50  # Process in smaller batches
 
-            # Try 3m
-            sources = py3dep.query_3dep_sources(bbox, crs=4326, res="3m")
-            if sources is not None and not sources.empty:
-                coverage[system_id] = "3m"
-                continue
+    for i in range(0, len(all_bounds), batch_size):
+        batch = all_bounds[i:i + batch_size]
+        logger.info(f"Processing batch {i//batch_size + 1} of {(len(all_bounds) + batch_size - 1)//batch_size}")
 
-            # Fall back to 10m
-            sources = py3dep.query_3dep_sources(bbox, crs=4326, res="10m")
-            if sources is not None and not sources.empty:
-                coverage[system_id] = "10m"
-            else:
-                coverage[system_id] = None
+        with tqdm(total=len(batch), desc="Checking 3DEP coverage") as pbar:
+            for system_id, bbox in batch:
+                try:
+                    # Add error handling and retries for py3dep queries
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            sources = py3dep.query_3dep_sources(bbox, crs=4326, res="1m")
+                            if sources is not None and not sources.empty:
+                                coverage[system_id] = "1m"
+                                break
+                        except Exception as e:
+                            if attempt == max_retries - 1:
+                                logger.debug(f"Failed to check 1m coverage after {max_retries} attempts: {e}")
+                            else:
+                                await asyncio.sleep(1)  # Brief pause between retries
 
-        except Exception as e:
-            logger.error(f"Error checking coverage for system {system_id}: {e}")
-            coverage[system_id] = None
+                    if system_id not in coverage:
+                        coverage[system_id] = None
+                        update_system_status(system_id, SystemStatus.NO_3DEP)
 
-    # Log coverage summary
-    total = len(coverage)
-    has_1m = sum(1 for res in coverage.values() if res == "1m")
-    has_3m = sum(1 for res in coverage.values() if res == "3m")
-    has_10m = sum(1 for res in coverage.values() if res == "10m")
-    no_coverage = sum(1 for res in coverage.values() if res is None)
+                except Exception as e:
+                    logger.warning(f"Error checking coverage for system {system_id}: {e}")
+                    coverage[system_id] = None
+                    update_system_status(system_id, SystemStatus.ERROR, str(e))
 
-    logger.info("\n3DEP Coverage Summary:")
-    logger.info(f"Total systems: {total}")
-    logger.info(f"1m coverage: {has_1m} ({has_1m/total:.1%})")
-    logger.info(f"3m coverage: {has_3m} ({has_3m/total:.1%})")
-    logger.info(f"10m coverage: {has_10m} ({has_10m/total:.1%})")
-    logger.info(f"No coverage: {no_coverage} ({no_coverage/total:.1%})")
+                pbar.update(1)
+
+        # Save progress after each batch
+        save_3dep_coverage(coverage)
+        logger.info(f"Saved progress for {len(coverage)} systems")
+
+        # Brief pause between batches
+        await asyncio.sleep(2)
 
     return coverage
 
 
-def main():
-    """Command-line interface."""
+def add_existing_systems_to_status():
+    """Add existing processed systems to the status CSV."""
+    processed_dir = Path("data/processed")
+    if not processed_dir.exists():
+        logger.error("No processed directory found")
+        return
+
+    # Get all existing parquet files
+    existing_files = list(processed_dir.glob("levee_*.parquet"))
+    logger.info(f"Found {len(existing_files)} existing processed files")
+
+    for file_path in tqdm(existing_files, desc="Adding existing systems to status"):
+        try:
+            # Extract system ID from filename
+            system_id = file_path.stem.replace("levee_", "")
+
+            # Load the parquet file to get point count
+            gdf = gpd.read_parquet(file_path)
+            if len(gdf) > 0:
+                update_system_status(
+                    system_id,
+                    SystemStatus.SUCCESS,
+                    f"Existing data with {len(gdf)} points"
+                )
+            else:
+                update_system_status(
+                    system_id,
+                    SystemStatus.TOO_FEW_POINTS,
+                    "Empty file"
+                )
+        except Exception as e:
+            logger.error(f"Error processing {file_path}: {e}")
+
+
+def get_all_system_ids() -> List[str]:
+    """Get list of ALL system IDs (USACE and non-USACE) from NLD API."""
+    url = "https://levees.sec.usace.army.mil:443/api-local/system-categories/usace-nonusace"
+    try:
+        response = session.get(url, timeout=30)
+        if response.status_code == 200:
+            data = response.json()
+            # Combine USACE and non-USACE systems
+            usace_systems = json.loads(data.get("USACE", "[]"))
+            nonusace_systems = json.loads(data.get("NON-USACE", "[]"))
+            return usace_systems + nonusace_systems
+        else:
+            logger.warning(f"API request failed with status code: {response.status_code}")
+            return []
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"API request failed: {e}")
+        return []
+
+def save_3dep_coverage(coverage: Dict[str, str]):
+    """Save 3DEP coverage information to CSV."""
+    coverage_file = Path("data/3dep_coverage.csv")
+    coverage_file.parent.mkdir(parents=True, exist_ok=True)
+
+    df = pd.DataFrame([
+        {"system_id": sid, "resolution": res}
+        for sid, res in coverage.items()
+    ])
+    df.to_csv(coverage_file, index=False)
+    logger.info(f"Saved 3DEP coverage information for {len(df)} systems")
+
+def load_3dep_coverage() -> Dict[str, str]:
+    """Load existing 3DEP coverage information."""
+    coverage_file = Path("data/3dep_coverage.csv")
+    if not coverage_file.exists():
+        return {}
+
+    df = pd.read_csv(coverage_file)
+    return dict(zip(df.system_id, df.resolution))
+
+async def check_all_3dep_coverage(session: aiohttp.ClientSession):
+    """Check and save 3DEP coverage for all levee systems."""
+    # Load existing coverage
+    existing_coverage = load_3dep_coverage()
+    logger.info(f"Found existing 3DEP coverage for {len(existing_coverage)} systems")
+
+    # Get all system IDs
+    all_systems = get_all_system_ids()
+    new_systems = [sid for sid in all_systems if sid not in existing_coverage]
+    logger.info(f"Found {len(new_systems)} systems needing 3DEP coverage check")
+
+    if new_systems:
+        # Check coverage for new systems
+        new_coverage = await check_3dep_coverage(new_systems, session)
+
+        # Combine with existing coverage
+        combined_coverage = {**existing_coverage, **new_coverage}
+
+        # Save updated coverage
+        save_3dep_coverage(combined_coverage)
+        return combined_coverage
+    return existing_coverage
+
+async def main_async():
+    """Async main function."""
     parser = argparse.ArgumentParser(
         description="Sample levee systems and compare NLD vs 3DEP elevations"
     )
@@ -966,29 +1162,72 @@ def main():
         default=1,
         help="Maximum number of concurrent connections",
     )
+    parser.add_argument(
+        "--check-3dep",
+        action="store_true",
+        help="Check 3DEP coverage for all systems"
+    )
     args = parser.parse_args()
 
     # Create output directories
     Path("data/processed").mkdir(parents=True, exist_ok=True)
 
+    # Add existing systems to status first
+    add_existing_systems_to_status()
+
     # Get samples
     logger.info(f"\nGetting {args.n_samples} random levee samples...")
     start_time = time.time()
 
-    results = get_random_levees(
-        n_samples=args.n_samples,
-        max_concurrent=args.max_concurrent,
-    )
+    async with aiohttp.ClientSession() as session:
+        if args.check_3dep:
+            await check_all_3dep_coverage(session)
+        else:
+            results = await get_random_levees_async(
+                n_samples=args.n_samples,
+                max_concurrent=args.max_concurrent,
+            )
 
-    # Log summary
-    elapsed = time.time() - start_time
-    logger.info(
-        f"\nSummary:\n"
-        f"  Systems processed: {len(results)}\n"
-        f"  Total time: {elapsed:.1f} seconds\n"
-        f"  Average time per system: {elapsed/max(1,len(results)):.1f} seconds"
-    )
+            # Log summary
+            elapsed = time.time() - start_time
+            logger.info(
+                f"\nSummary:\n"
+                f"  Systems processed: {len(results)}\n"
+                f"  Total time: {elapsed:.1f} seconds\n"
+                f"  Average time per system: {elapsed/max(1,len(results)):.1f} seconds"
+            )
 
+def main():
+    """Command-line interface."""
+    asyncio.run(main_async())
+
+def calculate_system_difference(system_id: str) -> float:
+    """Calculate mean elevation difference for a system."""
+    try:
+        # Load the parquet file
+        file_path = Path(f"data/processed/levee_{system_id}.parquet")
+        if not file_path.exists():
+            logger.error(f"No data found for system {system_id}")
+            return None
+
+        # Read the data
+        gdf = gpd.read_parquet(file_path)
+
+        # Calculate difference (NLD - 3DEP)
+        diff = gdf['elevation'] - gdf['dep_elevation']
+        mean_diff = diff.mean()
+        std_diff = diff.std()
+
+        logger.info(f"\nSystem {system_id} Statistics:")
+        logger.info(f"Mean difference (NLD - 3DEP): {mean_diff:.2f} meters")
+        logger.info(f"Standard deviation: {std_diff:.2f} meters")
+        logger.info(f"Number of points: {len(gdf)}")
+
+        return mean_diff
+
+    except Exception as e:
+        logger.error(f"Error calculating difference for system {system_id}: {e}")
+        return None
 
 if __name__ == "__main__":
     main()
